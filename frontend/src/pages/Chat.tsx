@@ -14,9 +14,11 @@ export default function Chat() {
   const { toast } = useToast()
   
   const [selectedModel, setSelectedModel] = useState<string>('')
+  const [selectedModelName, setSelectedModelName] = useState<string>('')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isEmbeddingModel, setIsEmbeddingModel] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -32,7 +34,19 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const runningModels = models.filter((m) => m.status === 'RUNNING')
+  // Filter out embedding models from chat (they only output vectors)
+  const runningModels = models.filter((m) => {
+    if (m.status !== 'RUNNING') return false
+    
+    // Exclude embedding models
+    const name = m.model_name.toLowerCase()
+    const isEmbedding = name.includes('embed') ||
+                       name.includes('sentence-transformers') ||
+                       name.includes('bge-') ||
+                       name.includes('minilm')
+    
+    return !isEmbedding  // Only show chat models
+  })
 
   const handleSend = async () => {
     if (!input.trim() || !selectedModel) return
@@ -47,53 +61,79 @@ export default function Chat() {
     setLoading(true)
 
     try {
-      const response = await api.chat(selectedModel, [...messages, userMessage], {
-        stream: true,
-        temperature: 0.7,
-        max_tokens: 2048,
-      })
+      // Check if this is an embedding model
+      if (isEmbeddingModel) {
+        // Use embedding API
+        const response = await fetch('http://localhost:7860/api/embeddings/embed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model_name: selectedModelName,
+            text: input.trim()
+          })
+        })
 
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('No reader available')
+        if (!response.ok) throw new Error('Embedding failed')
 
-      const decoder = new TextDecoder()
-      let assistantMessage = ''
+        const data = await response.json()
+        
+        // Format embedding as message
+        const embeddingText = `Embedding Vector (${data.dimension} dimensions):\n\n${JSON.stringify(data.embedding.slice(0, 10), null, 2)}...\n\n[Showing first 10 of ${data.dimension} values]\n\nFull vector: ${data.embedding.length} floats`
+        
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: embeddingText }
+        ])
+      } else {
+        // Regular chat with LLM
+        const response = await api.chat(selectedModel, [...messages, userMessage], {
+          stream: true,
+          temperature: 0.7,
+          max_tokens: 2048,
+        })
 
-      // 添加助手消息占位符
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: '' },
-      ])
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error('No reader available')
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+        const decoder = new TextDecoder()
+        let assistantMessage = ''
 
-        const chunk = decoder.decode(value)
-        const lines = chunk.split('\n')
+        // 添加助手消息占位符
+        setMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: '' },
+        ])
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-            try {
-              const parsed = JSON.parse(data)
-              const delta = parsed.choices?.[0]?.delta?.content
-              if (delta) {
-                assistantMessage += delta
-                // 更新最后一条消息
-                setMessages((prev) => {
-                  const newMessages = [...prev]
-                  newMessages[newMessages.length - 1] = {
-                    role: 'assistant',
-                    content: assistantMessage,
-                  }
-                  return newMessages
-                })
+          const chunk = decoder.decode(value)
+          const lines = chunk.split('\n')
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6)
+              if (data === '[DONE]') continue
+
+              try {
+                const parsed = JSON.parse(data)
+                const delta = parsed.choices?.[0]?.delta?.content
+                if (delta) {
+                  assistantMessage += delta
+                  // 更新最后一条消息
+                  setMessages((prev) => {
+                    const newMessages = [...prev]
+                    newMessages[newMessages.length - 1] = {
+                      role: 'assistant',
+                      content: assistantMessage,
+                    }
+                    return newMessages
+                  })
+                }
+              } catch (e) {
+                // 忽略解析错误
               }
-            } catch (e) {
-              // 忽略解析错误
             }
           }
         }
@@ -105,7 +145,9 @@ export default function Chat() {
         variant: 'destructive',
       })
       // 移除占位符消息
-      setMessages((prev) => prev.slice(0, -1))
+      if (!isEmbeddingModel) {
+        setMessages((prev) => prev.slice(0, -1))
+      }
     } finally {
       setLoading(false)
     }
@@ -130,7 +172,20 @@ export default function Chat() {
           <label className="text-sm text-gray-400">Model:</label>
           <select
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
+            onChange={(e) => {
+              const modelId = e.target.value
+              setSelectedModel(modelId)
+              const model = runningModels.find(m => m.id === modelId)
+              if (model) {
+                setSelectedModelName(model.model_name)
+                // Check if embedding model (simple heuristic)
+                const isEmbed = model.model_name.toLowerCase().includes('embed') ||
+                               model.model_name.toLowerCase().includes('sentence-transformers') ||
+                               model.model_name.toLowerCase().includes('bge-') ||
+                               model.model_name.toLowerCase().includes('minilm')
+                setIsEmbeddingModel(isEmbed)
+              }
+            }}
             className="h-10 rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white"
             disabled={runningModels.length === 0}
           >
@@ -141,6 +196,11 @@ export default function Chat() {
               </option>
             ))}
           </select>
+          {isEmbeddingModel && selectedModel && (
+            <span className="text-xs text-purple-400 ml-2">
+              📊 Embedding Mode
+            </span>
+          )}
         </div>
       </div>
 
@@ -213,7 +273,9 @@ export default function Chat() {
                 onKeyPress={handleKeyPress}
                 placeholder={
                   selectedModel
-                    ? 'Type your message... (Press Enter to send)'
+                    ? (isEmbeddingModel 
+                        ? 'Enter text to get embedding vector...' 
+                        : 'Type your message... (Press Enter to send)')
                     : 'Select a model first'
                 }
                 disabled={!selectedModel || loading}

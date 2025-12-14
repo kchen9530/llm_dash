@@ -1,0 +1,22 @@
+# Lightweight dependencies for Mac with 8GB RAM
+# FastAPI backend essentials
+fastapi==0.108.0
+uvicorn[standard]==0.25.0
+python-multipart==0.0.6
+websockets==12.0
+pydantic>=2.9
+pydantic-settings>=2.1.0
+python-dotenv==1.0.0
+httpx==0.26.0
+psutil==5.9.6
+pysocks==1.7.1
+
+# For CPU-only small model inference (much lighter than vLLM)
+transformers>=4.45.2
+torch>=2.0.0
+accelerate>=0.20.0
+sentencepiece
+
+# For embedding models
+sentence-transformers>=2.2.0
+

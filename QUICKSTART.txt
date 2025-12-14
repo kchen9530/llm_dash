@@ -1,0 +1,75 @@
+╔════════════════════════════════════════════════════════════════╗
+║                  LLM DASHBOARD - QUICK START                   ║
+║                    Mac 8GB RAM Edition                         ║
+╚════════════════════════════════════════════════════════════════╝
+
+🚀 START THE DASHBOARD
+──────────────────────────────────────────────────────────────────
+  cd /Users/kaichen/Desktop/llm-dash
+  ./start-mac.sh
+
+  Then open: http://localhost:5173
+
+🤖 RECOMMENDED MODELS (for "hello" and "1+1" tests)
+──────────────────────────────────────────────────────────────────
+  ⚡ Fast:   gpt2                              (~500MB)
+  ✨ Better: Qwen/Qwen2-0.5B-Instruct         (~1GB) 👈 BEST!
+  🎯 Best:   TinyLlama/TinyLlama-1.1B-Chat-v1.0 (~2GB)
+
+  🇨🇳 For China users: Qwen models work great! (支持中文)
+
+⚠️  NOTE: Tiny models give silly answers. That's normal! They're
+    just for testing the interface. For real LLM work, you need
+    a GPU server with 7B+ models.
+
+⏱️  EXPECTED WAIT TIMES (CPU Mode)
+──────────────────────────────────────────────────────────────────
+  First download:  1-3 minutes (one-time)
+  Model startup:   30-90 seconds
+  Chat response:   2-10 seconds
+
+🔄 SWITCH TO GPU MODE (LATER)
+──────────────────────────────────────────────────────────────────
+  Two options:
+
+  1. Install vLLM (if you get a GPU Mac):
+     cd backend && source venv/bin/activate
+     pip install vllm
+     Edit: backend/app/core/config.py
+     Set: FORCE_CPU_MODE = False
+
+  2. Use remote GPU server (recommended):
+     Edit: backend/.env
+     Add:  GPU_SERVER_URL=http://your-server:8000
+
+🛑 STOP THE DASHBOARD
+──────────────────────────────────────────────────────────────────
+  Press Ctrl+C in the terminal
+
+🆘 TROUBLESHOOTING
+──────────────────────────────────────────────────────────────────
+  Backend won't start?
+    cd backend
+    source venv/bin/activate
+    python run.py
+
+  Frontend won't start?
+    cd frontend
+    npm run dev
+
+  Port in use?
+    lsof -ti:7860 | xargs kill
+    lsof -ti:5173 | xargs kill
+
+  In China with proxy?
+    Read: CHINA_NETWORK_GUIDE.md
+    Your TUN mode should work automatically!
+
+  Need more help?
+    Read: MAC_SETUP.md
+    Read: SETUP_COMPLETE.md
+
+╔════════════════════════════════════════════════════════════════╗
+║  Your environment is ready! Have fun! 🎉                      ║
+╚════════════════════════════════════════════════════════════════╝
+

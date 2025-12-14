@@ -199,3 +199,4 @@ Just needs proper hardware (8GB+ RAM or GPU) to run smoothly!
 
 **Need help?** Check the documentation files in the repository.
 
+

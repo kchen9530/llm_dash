@@ -1,13 +1,22 @@
 """
-对话路由（代理到 vLLM）
+对话路由（支持轻量级和 vLLM 模式）
 """
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 import httpx
 from typing import AsyncGenerator
+import os
+import json
 
 from app.models.schemas import ChatRequest
-from app.services.model_manager import ModelManager
+
+# Use lightweight manager for 8GB RAM systems
+USE_LIGHTWEIGHT = os.getenv("USE_LIGHTWEIGHT_MANAGER", "true").lower() == "true"
+
+if USE_LIGHTWEIGHT:
+    from app.services.lightweight_model_manager import LightweightModelManager as ModelManager
+else:
+    from app.services.model_manager import ModelManager
 
 router = APIRouter()
 model_manager = ModelManager()
@@ -16,7 +25,7 @@ model_manager = ModelManager()
 @router.post("/completions")
 async def chat_completions(request: ChatRequest):
     """
-    聊天补全（代理到对应的 vLLM 实例）
+    聊天补全（支持轻量级模式和 vLLM）
     """
     # 获取模型实例
     model_info = model_manager.get_model(request.model_id)
@@ -29,41 +38,90 @@ async def chat_completions(request: ChatRequest):
             detail=f"模型状态异常: {model_info.status}"
         )
     
-    # 构建 vLLM API 地址
-    vllm_url = f"http://localhost:{model_info.port}/v1/chat/completions"
-    
-    # 转换为 OpenAI 格式
-    payload = {
-        "model": model_info.model_name,
-        "messages": [msg.dict() for msg in request.messages],
-        "stream": request.stream,
-        "temperature": request.temperature,
-        "max_tokens": request.max_tokens,
-    }
-    
     try:
-        if request.stream:
-            # 流式响应 - 创建独立的生成器和客户端
-            async def stream_generator() -> AsyncGenerator[str, None]:
-                async with httpx.AsyncClient(timeout=300.0) as client:
-                    async with client.stream("POST", vllm_url, json=payload) as response:
-                        async for line in response.aiter_lines():
-                            if line.strip():
-                                yield f"{line}\n"
+        if USE_LIGHTWEIGHT:
+            # Use lightweight direct inference
+            # Build prompt from messages
+            prompt = "\n".join([f"{msg.role}: {msg.content}" for msg in request.messages])
+            prompt += "\nassistant: "
             
-            return StreamingResponse(
-                stream_generator(),
-                media_type="text/event-stream"
-            )
+            if request.stream:
+                # Streaming response
+                async def stream_generator() -> AsyncGenerator[str, None]:
+                    try:
+                        async for chunk in model_manager.generate_stream(
+                            model_id=request.model_id,
+                            prompt=prompt,
+                            max_tokens=request.max_tokens,
+                            temperature=request.temperature
+                        ):
+                            # Format as SSE
+                            data = {
+                                "choices": [{
+                                    "delta": {"content": chunk},
+                                    "index": 0
+                                }]
+                            }
+                            yield f"data: {json.dumps(data)}\n\n"
+                        yield "data: [DONE]\n\n"
+                    except Exception as e:
+                        error_data = {"error": str(e)}
+                        yield f"data: {json.dumps(error_data)}\n\n"
+                
+                return StreamingResponse(
+                    stream_generator(),
+                    media_type="text/event-stream"
+                )
+            else:
+                # Non-streaming response
+                response_text = await model_manager.generate(
+                    model_id=request.model_id,
+                    prompt=prompt,
+                    max_tokens=request.max_tokens,
+                    temperature=request.temperature
+                )
+                
+                return {
+                    "choices": [{
+                        "message": {
+                            "role": "assistant",
+                            "content": response_text
+                        },
+                        "index": 0
+                    }]
+                }
         else:
-            # 非流式响应
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(vllm_url, json=payload)
-                return response.json()
+            # Use vLLM proxy (original code)
+            vllm_url = f"http://localhost:{model_info.port}/v1/chat/completions"
+            
+            payload = {
+                "model": model_info.model_name,
+                "messages": [msg.dict() for msg in request.messages],
+                "stream": request.stream,
+                "temperature": request.temperature,
+                "max_tokens": request.max_tokens,
+            }
+            
+            if request.stream:
+                async def stream_generator() -> AsyncGenerator[str, None]:
+                    async with httpx.AsyncClient(timeout=300.0) as client:
+                        async with client.stream("POST", vllm_url, json=payload) as response:
+                            async for line in response.aiter_lines():
+                                if line.strip():
+                                    yield f"{line}\n"
+                
+                return StreamingResponse(
+                    stream_generator(),
+                    media_type="text/event-stream"
+                )
+            else:
+                async with httpx.AsyncClient(timeout=300.0) as client:
+                    response = await client.post(vllm_url, json=payload)
+                    return response.json()
     
-    except httpx.RequestError as e:
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"请求 vLLM 失败: {str(e)}"
+            detail=f"Chat failed: {str(e)}"
         )
 

@@ -1,0 +1,65 @@
+{
+  "photos": [
+    {
+      "id": "photo_001",
+      "filename": "black_cat_sleeping.jpg",
+      "description": "A black cat sleeping peacefully on a soft cushion",
+      "tags": ["cat", "black", "sleeping", "indoor"]
+    },
+    {
+      "id": "photo_002",
+      "filename": "white_dog_running.jpg",
+      "description": "A white fluffy dog running happily in a green park",
+      "tags": ["dog", "white", "running", "outdoor", "park"]
+    },
+    {
+      "id": "photo_003",
+      "filename": "orange_cat_playing.jpg",
+      "description": "An orange tabby cat playing with a toy mouse",
+      "tags": ["cat", "orange", "playing", "toy"]
+    },
+    {
+      "id": "photo_004",
+      "filename": "brown_dog_sitting.jpg",
+      "description": "A brown dog sitting obediently and looking at the camera",
+      "tags": ["dog", "brown", "sitting", "obedient"]
+    },
+    {
+      "id": "photo_005",
+      "filename": "gray_cat_window.jpg",
+      "description": "A gray cat sitting by the window watching birds outside",
+      "tags": ["cat", "gray", "window", "watching"]
+    },
+    {
+      "id": "photo_006",
+      "filename": "black_dog_beach.jpg",
+      "description": "A black dog running on the beach near the ocean",
+      "tags": ["dog", "black", "beach", "ocean", "running"]
+    },
+    {
+      "id": "photo_007",
+      "filename": "calico_cat_eating.jpg",
+      "description": "A calico cat eating food from a bowl in the kitchen",
+      "tags": ["cat", "calico", "eating", "kitchen"]
+    },
+    {
+      "id": "photo_008",
+      "filename": "golden_dog_fetch.jpg",
+      "description": "A golden retriever playing fetch with a ball in the backyard",
+      "tags": ["dog", "golden", "playing", "fetch", "ball"]
+    },
+    {
+      "id": "photo_009",
+      "filename": "white_cat_grooming.jpg",
+      "description": "A white cat grooming itself and licking its paw",
+      "tags": ["cat", "white", "grooming", "cleaning"]
+    },
+    {
+      "id": "photo_010",
+      "filename": "spotted_dog_grass.jpg",
+      "description": "A spotted dalmatian dog lying on green grass in the garden",
+      "tags": ["dog", "spotted", "dalmatian", "grass", "garden"]
+    }
+  ]
+}
+

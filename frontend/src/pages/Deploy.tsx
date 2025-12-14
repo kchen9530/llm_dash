@@ -3,19 +3,47 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useModelStore } from '@/store/useModelStore'
 import { useNavigate } from 'react-router-dom'
-import { Rocket, Loader2, AlertCircle, Cpu, Zap } from 'lucide-react'
+import { Rocket, Loader2, AlertCircle, Cpu, Zap, MessageSquare, Binary } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 import { api } from '@/lib/api'
 
-const presetModels = [
-  { name: 'Qwen/Qwen2-0.5B-Instruct', size: '0.5B', memory: '~1GB', description: 'Tiny model for testing', cpuOk: true },
-  { name: 'Qwen/Qwen2-1.5B-Instruct', size: '1.5B', memory: '~3GB', description: 'Small efficient model', cpuOk: true },
-  { name: 'Qwen/Qwen2-7B-Instruct', size: '7B', memory: '~14GB', description: 'Production ready', cpuOk: false },
-  { name: 'meta-llama/Llama-3-8B-Instruct', size: '8B', memory: '~16GB', description: 'Meta Llama 3', cpuOk: false },
-  { name: 'mistralai/Mistral-7B-Instruct-v0.3', size: '7B', memory: '~14GB', description: 'Mistral AI', cpuOk: false },
-]
+interface RecommendedModel {
+  type: string
+  size: string
+  display_name?: string
+  label?: string
+  size_mb: number
+  ram_mb: number
+  speed: string
+  quality?: string
+  dimensions?: number
+  description: string
+  recommended_for: string
+  downloaded?: boolean
+  download_size?: string
+  family?: string
+  requires_gpu?: boolean
+}
+
+interface RecommendedModels {
+  chat_models: Record<string, RecommendedModel>
+  embedding_models: Record<string, RecommendedModel>
+  note: string
+}
+
+interface DownloadedModel {
+  name: string
+  path: string
+  size: string
+}
+
+interface DownloadedModels {
+  chat: DownloadedModel[]
+  embedding: DownloadedModel[]
+}
 
 export default function Deploy() {
   const navigate = useNavigate()
@@ -24,6 +52,8 @@ export default function Deploy() {
   
   const [loading, setLoading] = useState(false)
   const [computeMode, setComputeMode] = useState<{mode: string, use_gpu: boolean} | null>(null)
+  const [recommendations, setRecommendations] = useState<RecommendedModels | null>(null)
+  const [downloaded, setDownloaded] = useState<DownloadedModels | null>(null)
   const [formData, setFormData] = useState({
     model_name: '',
     local_path: '',
@@ -35,10 +65,28 @@ export default function Deploy() {
   })
 
   useEffect(() => {
-    // Fetch compute mode on mount
+    // Fetch compute mode, recommendations, and downloaded models on mount
     api.get('/api/system/compute-mode')
-      .then(res => setComputeMode(res.data))
-      .catch(err => console.error('Failed to fetch compute mode:', err))
+      .then(res => {
+        console.log('✅ Compute mode loaded:', res.data)
+        setComputeMode(res.data)
+      })
+      .catch(err => console.error('❌ Failed to fetch compute mode:', err))
+    
+    api.get('/api/recommendations/models')
+      .then(res => {
+        console.log('✅ Recommendations loaded:', res.data)
+        console.log('✅ Chat models count:', Object.keys(res.data.chat_models || {}).length)
+        setRecommendations(res.data)
+      })
+      .catch(err => console.error('❌ Failed to fetch recommendations:', err))
+    
+    api.get('/api/recommendations/downloaded')
+      .then(res => {
+        console.log('✅ Downloaded models loaded:', res.data)
+        setDownloaded(res.data)
+      })
+      .catch(err => console.error('❌ Failed to fetch downloaded models:', err))
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -135,56 +183,168 @@ export default function Deploy() {
         </div>
       )}
 
-      {/* Preset Models */}
+      {/* Recommended Models */}
       <Card className="glass border-gray-800">
         <CardHeader>
-          <CardTitle className="text-white">Quick Select</CardTitle>
-          <CardDescription>Popular models ready to deploy</CardDescription>
+          <CardTitle className="text-white flex items-center gap-2">
+            <Rocket className="w-5 h-5" />
+            Recommended for 8GB RAM
+          </CardTitle>
+          <CardDescription>Pre-optimized models for your system</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {presetModels.map((model) => {
-              const isCpuMode = computeMode && !computeMode.use_gpu
-              const isDisabled = isCpuMode && !model.cpuOk
-              
-              return (
-                <button
-                  key={model.name}
-                  onClick={() => !isDisabled && selectPreset(model.name)}
-                  disabled={isDisabled}
-                  className={`p-4 text-left rounded-lg border transition-all ${
-                    formData.model_name === model.name
-                      ? 'bg-blue-600/20 border-blue-500'
-                      : isDisabled
-                      ? 'bg-gray-900/30 border-gray-800 opacity-50 cursor-not-allowed'
-                      : 'bg-gray-800/30 border-gray-700 hover:border-gray-600'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-semibold text-white text-sm">{model.name.split('/')[1]}</h3>
-                    <div className="flex gap-1">
-                      <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
-                        {model.size}
-                      </span>
-                      {model.cpuOk && isCpuMode && (
-                        <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded">
-                          CPU OK
-                        </span>
+          <Tabs defaultValue="chat" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-gray-800/50">
+              <TabsTrigger value="chat" className="data-[state=active]:bg-blue-600">
+                <MessageSquare className="w-4 h-4 mr-2" />
+                Chat Models
+              </TabsTrigger>
+              <TabsTrigger value="embedding" className="data-[state=active]:bg-purple-600">
+                <Binary className="w-4 h-4 mr-2" />
+                Embedding Models
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Chat Models */}
+            <TabsContent value="chat" className="mt-4">
+              {!recommendations && <p className="text-gray-400 p-4">Loading models...</p>}
+              {recommendations && !recommendations.chat_models && <p className="text-red-400 p-4">No chat_models field!</p>}
+              {recommendations && recommendations.chat_models && Object.keys(recommendations.chat_models).length === 0 && <p className="text-yellow-400 p-4">No chat models found!</p>}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {recommendations && recommendations.chat_models && Object.entries(recommendations.chat_models).map(([name, info]) => {
+                  const isDownloaded = info.downloaded || false
+                  const isCpuMode = computeMode && !computeMode.use_gpu
+                  const needsGpu = info.requires_gpu || false
+                  const isDisabled = isCpuMode && needsGpu
+                  
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => !isDisabled && selectPreset(name)}
+                      disabled={isDisabled}
+                      className={`p-5 text-left rounded-lg border-2 transition-all ${
+                        formData.model_name === name
+                          ? isDownloaded ? 'bg-green-600/20 border-green-500 shadow-lg' : 'bg-blue-600/20 border-blue-500 shadow-lg'
+                          : isDisabled
+                          ? 'bg-gray-900/30 border-gray-800 opacity-50 cursor-not-allowed'
+                          : isDownloaded
+                          ? 'bg-gray-800/30 border-green-700/50 hover:border-green-600 hover:shadow-md'
+                          : 'bg-gray-800/30 border-gray-700/50 hover:border-blue-500 hover:shadow-md'
+                      }`}
+                    >
+                      {/* Title and badges */}
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h3 className="font-bold text-white text-base mb-1">
+                            {info.display_name || name.split('/').pop()}
+                          </h3>
+                          <p className="text-xs text-gray-400 italic">
+                            {info.label || info.description}
+                          </p>
+                        </div>
+                        <div className="flex gap-1 flex-wrap justify-end">
+                          <span className="text-xs bg-blue-600 text-white px-2 py-0.5 rounded font-semibold">
+                            {info.size}
+                          </span>
+                          {isDownloaded ? (
+                            <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded font-semibold">
+                              ✓ Downloaded
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-gray-600 text-white px-2 py-0.5 rounded">
+                              Not Downloaded
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Stats */}
+                      <div className="flex items-center gap-3 text-xs text-gray-400 mb-2 flex-wrap">
+                        {isDownloaded && info.download_size && (
+                          <span className="text-green-400 font-semibold">💾 {info.download_size}</span>
+                        )}
+                        <span>RAM: ~{Math.round(info.ram_mb / 1024 * 10) / 10}GB</span>
+                        <span>Speed: {info.speed}</span>
+                        {info.quality && <span>Quality: {info.quality}</span>}
+                      </div>
+                      
+                      {/* Action text */}
+                      <p className={`text-sm font-semibold mt-3 ${isDownloaded ? 'text-green-400' : 'text-blue-400'}`}>
+                        {isDownloaded ? '⚡ Click to deploy instantly!' : `💡 Click to deploy (will download)`}
+                      </p>
+                      
+                      {isDisabled && (
+                        <p className="text-xs text-amber-400 mt-2 flex items-center gap-1 font-semibold">
+                          <AlertCircle className="w-3 h-3" />
+                          Requires GPU server
+                        </p>
                       )}
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-400">{model.description}</p>
-                  <p className="text-xs text-gray-500 mt-1">Memory: {model.memory}</p>
-                  {isDisabled && (
-                    <p className="text-xs text-amber-400 mt-2 flex items-center gap-1">
-                      <AlertCircle className="w-3 h-3" />
-                      GPU required
-                    </p>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </TabsContent>
+
+            {/* Embedding Models */}
+            <TabsContent value="embedding" className="mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {recommendations && Object.entries(recommendations.embedding_models).map(([name, info]) => {
+                  const isDownloaded = info.downloaded || false
+                  
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => selectPreset(name)}
+                      className={`p-4 text-left rounded-lg border transition-all ${
+                        formData.model_name === name
+                          ? isDownloaded ? 'bg-green-600/20 border-green-500' : 'bg-purple-600/20 border-purple-500'
+                          : isDownloaded
+                          ? 'bg-gray-800/30 border-green-700 hover:border-green-600'
+                          : 'bg-gray-800/30 border-gray-700 hover:border-gray-600'
+                      }`}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <h3 className="font-semibold text-white text-sm truncate pr-2">{name.split('/').pop()}</h3>
+                        <div className="flex gap-1 flex-shrink-0 flex-wrap justify-end">
+                          <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded">
+                            {info.size}
+                          </span>
+                          {isDownloaded ? (
+                            <span className="text-xs bg-green-600 text-white px-2 py-0.5 rounded">
+                              ✓ Downloaded
+                            </span>
+                          ) : (
+                            <span className="text-xs bg-gray-600 text-white px-2 py-0.5 rounded">
+                              Not Downloaded
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-400 mb-1">{info.description}</p>
+                      <div className="flex items-center gap-3 text-xs text-gray-500 mt-2 flex-wrap">
+                        {isDownloaded && info.download_size && (
+                          <span className="text-green-400">💾 {info.download_size}</span>
+                        )}
+                        <span>RAM: ~{Math.round(info.ram_mb)}MB</span>
+                        <span>Dim: {info.dimensions}</span>
+                        <span>Speed: {info.speed}</span>
+                      </div>
+                      <p className={`text-xs mt-2 ${isDownloaded ? 'text-green-400' : 'text-purple-400'}`}>
+                        {isDownloaded ? '⚡ Ready to deploy!' : `💡 ${info.recommended_for}`}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="mt-4 p-3 bg-purple-600/10 border border-purple-600/30 rounded-lg">
+                <p className="text-xs text-purple-300">
+                  <Binary className="w-3 h-3 inline mr-1" />
+                  <strong>Note:</strong> Embedding models output vectors (floats), not chat responses. 
+                  Use them in Photo Search tab, not Chat tab.
+                </p>
+              </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 

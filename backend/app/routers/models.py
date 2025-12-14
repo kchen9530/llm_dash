@@ -5,9 +5,17 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from typing import List
 import asyncio
 import json
+import os
 
 from app.models.schemas import DeployRequest, ModelInfo
-from app.services.model_manager import ModelManager
+
+# Use lightweight manager for 8GB RAM systems
+USE_LIGHTWEIGHT = os.getenv("USE_LIGHTWEIGHT_MANAGER", "true").lower() == "true"
+
+if USE_LIGHTWEIGHT:
+    from app.services.lightweight_model_manager import LightweightModelManager as ModelManager
+else:
+    from app.services.model_manager import ModelManager
 
 router = APIRouter()
 model_manager = ModelManager()
@@ -72,29 +80,45 @@ async def remove_model(model_id: str):
 
 
 @router.get("/{model_id}/logs")
-async def get_model_logs(model_id: str, lines: int = 100):
+async def get_model_logs(model_id: str, lines: int = 500):
     """
-    获取模型日志
+    Get logs for a specific model
     """
-    logs = model_manager.get_logs(model_id, lines)
-    return {"model_id": model_id, "logs": logs}
+    from ..services.model_logger import model_logger
+    
+    logs = model_logger.get_logs(model_id, lines)
+    
+    if not logs:
+        # Check if model exists
+        manager = get_model_manager()
+        try:
+            manager.get_model_info(model_id)
+            # Model exists but no logs yet
+            return {"logs": ["Model is initializing, no logs available yet"], "count": 1}
+        except (ValueError, AttributeError):
+            raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+    
+    return {"logs": logs, "count": len(logs)}
 
 
 @router.websocket("/ws/logs/{model_id}")
 async def websocket_logs(websocket: WebSocket, model_id: str):
     """
-    WebSocket 实时日志流
+    WebSocket real-time log streaming
     """
+    from ..services.model_logger import model_logger
+    
     await websocket.accept()
     
     try:
         last_log_count = 0
+        manager = get_model_manager()
         
         while True:
-            # 获取新日志
-            logs = model_manager.get_logs(model_id, lines=1000)
+            # Get new logs
+            logs = model_logger.get_logs(model_id, lines=1000)
             
-            # 只发送新增的日志
+            # Send only new logs
             if len(logs) > last_log_count:
                 new_logs = logs[last_log_count:]
                 for log in new_logs:
@@ -105,21 +129,23 @@ async def websocket_logs(websocket: WebSocket, model_id: str):
                     })
                 last_log_count = len(logs)
             
-            # 发送模型状态更新
-            model_info = model_manager.get_model(model_id)
-            if model_info:
+            # Send model status update
+            try:
+                model_info = manager.get_model_info(model_id)
                 await websocket.send_json({
                     "type": "status",
                     "model_id": model_id,
-                    "status": model_info.status,
+                    "status": model_info.get("status", "UNKNOWN"),
                 })
+            except:
+                pass
             
             await asyncio.sleep(1)
     
     except WebSocketDisconnect:
-        print(f"WebSocket 断开: {model_id}")
+        print(f"WebSocket disconnected: {model_id}")
     except Exception as e:
-        print(f"WebSocket 错误: {e}")
+        print(f"WebSocket error: {e}")
     finally:
         try:
             await websocket.close()

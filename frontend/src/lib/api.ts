@@ -55,7 +55,8 @@ class ApiClient {
   async get(url: string): Promise<any> {
     const res = await fetch(url)
     if (!res.ok) throw new Error(`Failed to fetch ${url}`)
-    return res
+    const data = await res.json()
+    return { data }  // Return in format that matches existing code
   }
 
   // System APIs
