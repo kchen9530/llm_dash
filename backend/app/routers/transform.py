@@ -5,7 +5,12 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
-from app.services.text_to_json_transformer import transform_text_to_json, TransformerFactory
+from app.services.processor import (
+    process_text_to_json,
+    ProcessorFactory,
+    RuleBasedTextProcessor,
+    LLMBasedTextProcessor
+)
 
 router = APIRouter()
 
@@ -57,25 +62,23 @@ async def transform_text(request: TransformRequest):
         - "dog named Max" → {"dog": {"name": "Max"}}
     """
     try:
-        # Get transformer and determine method
-        transformer = TransformerFactory.create_transformer(request.prefer_llm)
-        method = "llm" if transformer.__class__.__name__ == "LLMBasedTransformer" else "rule-based"
+        # Create processor using factory
+        processor = ProcessorFactory.create_processor(prefer_llm=request.prefer_llm)
         
-        # Get model info if using LLM
+        # Determine method from processor type
+        method = "llm" if isinstance(processor, LLMBasedTextProcessor) else "rule-based"
+        
+        # Get model info if using LLM (future enhancement)
         model_used = None
         if method == "llm":
-            from app.services.model_manager import ModelManager
-            manager = ModelManager()
-            models = manager.list_models()
-            running = [m for m in models if m.status == "RUNNING"]
-            if running:
-                model_used = running[0].id
+            # TODO: Extract model info from LLMBasedTextProcessor once implemented
+            pass
         
-        # Perform transformation
-        result = await transform_text_to_json(
+        # Perform transformation using new processor
+        result = await process_text_to_json(
             text=request.text,
             schema_hint=request.schema_hint,
-            prefer_llm=request.prefer_llm
+            processor=processor
         )
         
         return TransformResponse(
@@ -85,6 +88,9 @@ async def transform_text(request: TransformRequest):
             model_used=model_used
         )
     
+    except NotImplementedError as e:
+        # LLMBasedTextProcessor not yet implemented
+        raise HTTPException(status_code=501, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

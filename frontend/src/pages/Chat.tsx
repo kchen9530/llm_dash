@@ -38,18 +38,9 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Filter out embedding models from chat (they only output vectors)
+  // Show all running models (both chat and embedding models)
   const runningModels = models.filter((m) => {
-    if (m.status !== 'RUNNING') return false
-    
-    // Exclude embedding models
-    const name = m.model_name.toLowerCase()
-    const isEmbedding = name.includes('embed') ||
-                       name.includes('sentence-transformers') ||
-                       name.includes('bge-') ||
-                       name.includes('minilm')
-    
-    return !isEmbedding  // Only show chat models
+    return m.status === 'RUNNING'
   })
 
   const handleSend = async () => {
