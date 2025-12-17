@@ -412,3 +412,4 @@ POST /api/embeddings/embed
 
 Try it now: http://localhost:5173/chat
 
+

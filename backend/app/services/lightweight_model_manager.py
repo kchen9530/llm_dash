@@ -35,6 +35,7 @@ class LightweightModelInstance:
         self.runner: Optional[CPUModelRunner] = None
         self.model_type = "embedding" if is_embedding_model(model_name) else "chat"
         self.embedding_handler = None  # For embedding models
+        self.loading_task: Optional[asyncio.Task] = None  # Track loading task for cancellation
         
     def to_model_info(self) -> ModelInfo:
         """Convert to ModelInfo schema"""
@@ -111,8 +112,8 @@ class LightweightModelManager:
             # Add initial log
             model_logger.add_log(model_id, f"Deployment started for {request.model_name}", "INFO")
             
-            # Load model asynchronously
-            asyncio.create_task(self._load_model(instance))
+            # Load model asynchronously and store the task for cancellation
+            instance.loading_task = asyncio.create_task(self._load_model(instance))
             
             logger.info(f"📦 Started loading model: {model_id}")
             model_logger.add_log(model_id, f"📦 Started loading model: {model_id}", "INFO")
@@ -142,6 +143,13 @@ class LightweightModelManager:
                 model_logger.add_log(instance.model_id, "Loading embedding model...", "INFO")
                 handler = get_embedding_handler(instance.model_name)
                 await handler.load_model()
+                
+                # Check if cancelled during loading
+                if instance.status == ModelStatus.STOPPING:
+                    logger.info(f"⚠️  Model loading was cancelled during load: {instance.model_id}")
+                    handler.unload()
+                    return
+                
                 instance.embedding_handler = handler
                 
                 logger.info(f"✅ Embedding model {instance.model_id} is ready!")
@@ -161,12 +169,31 @@ class LightweightModelManager:
                 model_logger.add_log(instance.model_id, "Downloading/loading model weights...", "INFO")
                 await instance.runner.load_model()
                 
+                # Check if cancelled during loading
+                if instance.status == ModelStatus.STOPPING:
+                    logger.info(f"⚠️  Model loading was cancelled during load: {instance.model_id}")
+                    instance.runner.unload_model()
+                    return
+                
                 logger.info(f"✅ Chat model {instance.model_id} is ready!")
                 model_logger.add_log(instance.model_id, f"✅ Chat model ready! Model loaded successfully.", "INFO")
             
-            instance.status = ModelStatus.RUNNING
-            model_logger.add_log(instance.model_id, f"🚀 Model {instance.model_id} is now RUNNING", "INFO")
+            # Only set to RUNNING if not cancelled
+            if instance.status != ModelStatus.STOPPING:
+                instance.status = ModelStatus.RUNNING
+                model_logger.add_log(instance.model_id, f"🚀 Model {instance.model_id} is now RUNNING", "INFO")
             
+        except asyncio.CancelledError:
+            # Handle cancellation gracefully
+            instance.status = ModelStatus.STOPPED
+            logger.info(f"⚠️  Model loading cancelled: {instance.model_id}")
+            model_logger.add_log(instance.model_id, "⚠️ Model loading cancelled by user", "WARNING")
+            # Clean up any partially loaded resources
+            if instance.runner:
+                instance.runner.unload_model()
+            if instance.embedding_handler:
+                instance.embedding_handler.unload()
+            raise  # Re-raise to properly propagate cancellation
         except Exception as e:
             instance.status = ModelStatus.FAILED
             instance.error_message = str(e)
@@ -235,28 +262,47 @@ class LightweightModelManager:
             yield chunk
     
     async def stop_model(self, model_id: str) -> bool:
-        """Stop/unload a model"""
+        """Stop/unload a model (even during loading)"""
         instance = self._instances.get(model_id)
         if not instance:
             raise ValueError(f"Model {model_id} not found")
         
         try:
+            previous_status = instance.status
             instance.status = ModelStatus.STOPPING
+            logger.info(f"🛑 Stopping model {model_id} (was {previous_status})")
+            model_logger.add_log(model_id, f"🛑 Stopping model (was {previous_status})", "INFO")
             
+            # Cancel loading task if still loading
+            if instance.loading_task and not instance.loading_task.done():
+                logger.info(f"⚠️  Cancelling loading task for {model_id}")
+                model_logger.add_log(model_id, "⚠️ Cancelling model loading...", "WARNING")
+                instance.loading_task.cancel()
+                try:
+                    await instance.loading_task
+                except asyncio.CancelledError:
+                    logger.info(f"✅ Loading task cancelled for {model_id}")
+                    model_logger.add_log(model_id, "✅ Loading task cancelled", "INFO")
+            
+            # Unload model if loaded
             if instance.runner:
+                logger.info(f"🗑️ Unloading runner for {model_id}")
                 instance.runner.unload_model()
             
             if instance.embedding_handler:
+                logger.info(f"🗑️ Unloading embedding handler for {model_id}")
                 instance.embedding_handler.unload()
             
             instance.status = ModelStatus.STOPPED
-            logger.info(f"🛑 Model {model_id} stopped")
+            logger.info(f"✅ Model {model_id} stopped successfully")
+            model_logger.add_log(model_id, "✅ Model stopped successfully", "INFO")
             
             return True
         
         except Exception as e:
             instance.error_message = f"Stop failed: {str(e)}"
             logger.error(f"❌ Failed to stop {model_id}: {e}")
+            model_logger.add_log(model_id, f"❌ Failed to stop: {str(e)}", "ERROR")
             return False
     
     async def remove_model(self, model_id: str) -> bool:

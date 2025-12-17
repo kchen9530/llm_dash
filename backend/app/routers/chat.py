@@ -45,6 +45,10 @@ async def chat_completions(request: ChatRequest):
             prompt = "\n".join([f"{msg.role}: {msg.content}" for msg in request.messages])
             prompt += "\nassistant: "
             
+            # For small CPU models, limit max_tokens to something reasonable
+            # Most small models like GPT-2 only have 1024 token context
+            safe_max_tokens = min(request.max_tokens, 256)  # Cap at 256 for CPU models
+            
             if request.stream:
                 # Streaming response
                 async def stream_generator() -> AsyncGenerator[str, None]:
@@ -52,7 +56,7 @@ async def chat_completions(request: ChatRequest):
                         async for chunk in model_manager.generate_stream(
                             model_id=request.model_id,
                             prompt=prompt,
-                            max_tokens=request.max_tokens,
+                            max_tokens=safe_max_tokens,
                             temperature=request.temperature
                         ):
                             # Format as SSE
@@ -77,7 +81,7 @@ async def chat_completions(request: ChatRequest):
                 response_text = await model_manager.generate(
                     model_id=request.model_id,
                     prompt=prompt,
-                    max_tokens=request.max_tokens,
+                    max_tokens=safe_max_tokens,
                     temperature=request.temperature
                 )
                 

@@ -44,11 +44,20 @@ class EmbeddingModelHandler:
             }
         }
     
+    def _load_model_sync(self, embedding_models_dir):
+        """Synchronous model loading - runs in thread pool"""
+        from sentence_transformers import SentenceTransformer
+        return SentenceTransformer(
+            self.model_name,
+            cache_folder=str(embedding_models_dir)
+        )
+    
     async def load_model(self):
         """Load the embedding model"""
         try:
             # Set cache to embeddings directory
             import os
+            import asyncio
             from app.core.model_config import EMBEDDING_MODELS_DIR
             os.environ['HF_HOME'] = str(EMBEDDING_MODELS_DIR)
             os.environ['TRANSFORMERS_CACHE'] = str(EMBEDDING_MODELS_DIR)
@@ -66,17 +75,29 @@ class EmbeddingModelHandler:
                     "Install with: pip install sentence-transformers"
                 )
             
-            # Load model with custom cache directory
-            self.model = SentenceTransformer(
-                self.model_name,
-                cache_folder=str(EMBEDDING_MODELS_DIR)
+            # Run blocking operation in thread pool to avoid blocking event loop
+            loop = asyncio.get_event_loop()
+            logger.info("📥 Downloading/loading embedding model...")
+            self.model = await loop.run_in_executor(
+                None,  # Use default thread pool
+                self._load_model_sync,
+                EMBEDDING_MODELS_DIR
             )
+            
             self.embedding_dim = self.model.get_sentence_embedding_dimension()
             self.is_loaded = True
             
             logger.info(f"✅ Embedding model loaded: {self.model_name}")
             logger.info(f"📊 Embedding dimension: {self.embedding_dim}")
             
+        except asyncio.CancelledError:
+            logger.info(f"⚠️  Embedding model loading cancelled: {self.model_name}")
+            # Clean up any partially loaded resources
+            if self.model:
+                del self.model
+                self.model = None
+            self.is_loaded = False
+            raise
         except Exception as e:
             logger.error(f"❌ Failed to load embedding model: {e}")
             raise

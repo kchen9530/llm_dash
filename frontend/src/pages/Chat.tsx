@@ -4,23 +4,27 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useModelStore } from '@/store/useModelStore'
+import { useChatStore } from '@/store/useChatStore'
 import { api, ChatMessage } from '@/lib/api'
-import { Send, Bot, User, Loader2 } from 'lucide-react'
+import { Send, Bot, User, Loader2, Trash2 } from 'lucide-react'
 import { useToast } from '@/components/ui/use-toast'
 
 export default function Chat() {
   const [searchParams] = useSearchParams()
   const { models, fetchModels } = useModelStore()
+  const { getMessages, addMessage, updateLastMessage, clearMessages } = useChatStore()
   const { toast } = useToast()
   
   const [selectedModel, setSelectedModel] = useState<string>('')
   const [selectedModelName, setSelectedModelName] = useState<string>('')
-  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [isEmbeddingModel, setIsEmbeddingModel] = useState(false)
   
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  
+  // Get messages from store for selected model
+  const messages = selectedModel ? getMessages(selectedModel) : []
 
   useEffect(() => {
     fetchModels()
@@ -56,7 +60,8 @@ export default function Chat() {
       content: input.trim(),
     }
 
-    setMessages((prev) => [...prev, userMessage])
+    // Add user message to store
+    addMessage(selectedModel, selectedModelName, userMessage)
     setInput('')
     setLoading(true)
 
@@ -80,13 +85,15 @@ export default function Chat() {
         // Format embedding as message
         const embeddingText = `Embedding Vector (${data.dimension} dimensions):\n\n${JSON.stringify(data.embedding.slice(0, 10), null, 2)}...\n\n[Showing first 10 of ${data.dimension} values]\n\nFull vector: ${data.embedding.length} floats`
         
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: embeddingText }
-        ])
+        // Add embedding response to store
+        addMessage(selectedModel, selectedModelName, { 
+          role: 'assistant', 
+          content: embeddingText 
+        })
       } else {
         // Regular chat with LLM
-        const response = await api.chat(selectedModel, [...messages, userMessage], {
+        const currentMessages = getMessages(selectedModel)
+        const response = await api.chat(selectedModel, currentMessages, {
           stream: true,
           temperature: 0.7,
           max_tokens: 2048,
@@ -98,11 +105,11 @@ export default function Chat() {
         const decoder = new TextDecoder()
         let assistantMessage = ''
 
-        // 添加助手消息占位符
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: '' },
-        ])
+        // Add assistant message placeholder
+        addMessage(selectedModel, selectedModelName, { 
+          role: 'assistant', 
+          content: '' 
+        })
 
         while (true) {
           const { done, value } = await reader.read()
@@ -121,18 +128,11 @@ export default function Chat() {
                 const delta = parsed.choices?.[0]?.delta?.content
                 if (delta) {
                   assistantMessage += delta
-                  // 更新最后一条消息
-                  setMessages((prev) => {
-                    const newMessages = [...prev]
-                    newMessages[newMessages.length - 1] = {
-                      role: 'assistant',
-                      content: assistantMessage,
-                    }
-                    return newMessages
-                  })
+                  // Update last message in store
+                  updateLastMessage(selectedModel, assistantMessage)
                 }
               } catch (e) {
-                // 忽略解析错误
+                // Ignore parsing errors
               }
             }
           }
@@ -144,12 +144,29 @@ export default function Chat() {
         description: error.message,
         variant: 'destructive',
       })
-      // 移除占位符消息
+      // Remove placeholder message on error
       if (!isEmbeddingModel) {
-        setMessages((prev) => prev.slice(0, -1))
+        const currentMessages = getMessages(selectedModel)
+        if (currentMessages.length > 0 && currentMessages[currentMessages.length - 1].content === '') {
+          // Clear and re-add all messages except the last one
+          clearMessages(selectedModel)
+          currentMessages.slice(0, -1).forEach(msg => {
+            addMessage(selectedModel, selectedModelName, msg)
+          })
+        }
       }
     } finally {
       setLoading(false)
+    }
+  }
+  
+  const handleClearChat = () => {
+    if (selectedModel && confirm('Clear chat history for this model?')) {
+      clearMessages(selectedModel)
+      toast({
+        title: 'Chat Cleared',
+        description: 'Conversation history has been cleared',
+      })
     }
   }
 
@@ -169,6 +186,17 @@ export default function Chat() {
           <p className="text-gray-400 mt-1">Test your deployed models</p>
         </div>
         <div className="flex items-center gap-2">
+          {selectedModel && messages.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearChat}
+              className="border-gray-700 text-gray-300 hover:bg-red-900/20 hover:text-red-400 hover:border-red-700"
+            >
+              <Trash2 className="w-4 h-4 mr-1" />
+              Clear Chat
+            </Button>
+          )}
           <label className="text-sm text-gray-400">Model:</label>
           <select
             value={selectedModel}

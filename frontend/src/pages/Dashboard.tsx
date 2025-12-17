@@ -142,6 +142,11 @@ export default function Dashboard() {
                         </span>
                       )}
                     </div>
+                    {(model.status === 'STARTING' || model.status === 'INITIALIZING') && (
+                      <p className="text-sm text-amber-400 mt-2">
+                        ⏳ Loading model... This may take 1-3 minutes (first download can be longer). You can cancel if needed.
+                      </p>
+                    )}
                     {model.error_message && (
                       <p className="text-sm text-red-400 mt-2">⚠️ {model.error_message}</p>
                     )}
@@ -173,14 +178,12 @@ export default function Dashboard() {
                       onClick={() => handleStop(model.id)}
                       disabled={
                         model.status === 'STOPPED' || 
-                        model.status === 'STOPPING' ||
-                        model.status === 'INITIALIZING' ||
-                        model.status === 'STARTING'
+                        model.status === 'STOPPING'
                       }
                       className="border-gray-700"
                     >
                       <Square className="w-4 h-4 mr-1" />
-                      Stop
+                      {model.status === 'STARTING' || model.status === 'INITIALIZING' ? 'Cancel' : 'Stop'}
                     </Button>
                     <Button
                       variant="destructive"
@@ -189,7 +192,8 @@ export default function Dashboard() {
                       disabled={
                         model.status === 'RUNNING' ||
                         model.status === 'INITIALIZING' ||
-                        model.status === 'STARTING'
+                        model.status === 'STARTING' ||
+                        model.status === 'STOPPING'
                       }
                     >
                       <Trash2 className="w-4 h-4 mr-1" />
@@ -265,7 +269,7 @@ export default function Dashboard() {
                 variant="outline"
                 size="sm"
                 onClick={closeLogs}
-                className="border-gray-700"
+                className="border-gray-700 text-white hover:bg-gray-800"
               >
                 Close
               </Button>

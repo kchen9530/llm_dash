@@ -498,3 +498,4 @@ backend/app/data/photo_database.json
 
 Visit: http://localhost:5173/photos
 
+

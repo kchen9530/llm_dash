@@ -312,3 +312,4 @@ pip uninstall vllm
 **Next Step:** Try it out with `./start-mac.sh`  
 **Future:** Add GPU when you need real performance! 🚀
 
+

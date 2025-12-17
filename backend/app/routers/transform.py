@@ -109,3 +109,4 @@ async def get_available_methods():
         "recommendation": "llm" if running_models else "rule-based"
     }
 
+
