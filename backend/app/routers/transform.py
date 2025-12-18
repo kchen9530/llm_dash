@@ -19,14 +19,20 @@ class TransformRequest(BaseModel):
     """Request model for text transformation"""
     text: str
     schema_hint: Optional[str] = None
-    prefer_llm: bool = True
+    prefer_llm: bool = False
+    model1_id: Optional[str] = None  # LLM for category generation
+    model2_id: Optional[str] = None  # LLM for detail generation
+    embed_model_id: Optional[str] = None  # Embedding model
     
     class Config:
         json_schema_extra = {
             "example": {
                 "text": "this is a cat",
                 "schema_hint": None,
-                "prefer_llm": True
+                "prefer_llm": False,
+                "model1_id": "gpt2-221744",
+                "model2_id": "gpt2-221744",
+                "embed_model_id": "all-MiniLM-L6-v2-221750"
             }
         }
 
@@ -54,27 +60,39 @@ async def transform_text(request: TransformRequest):
     """
     Transform natural language text to structured JSON.
     
-    Uses LLM if available, falls back to rule-based transformation.
+    Supports two modes:
+    - Rule-based: Fast, deterministic pattern matching
+    - LLM-based: 3-step pipeline using deployed models
+      1. Model1: Generate category JSON
+      2. Model2: Generate detailed JSON
+      3. EmbedModel: Add embedding information
     
     Examples:
         - "this is a cat" → {"pet": {"category": "cat"}}
         - "I have a red car" → {"item": {"color": "red", "type": "car"}}
-        - "dog named Max" → {"dog": {"name": "Max"}}
     """
     try:
         # Create processor using factory
-        processor = ProcessorFactory.create_processor(prefer_llm=request.prefer_llm)
+        processor = ProcessorFactory.create_processor(
+            prefer_llm=request.prefer_llm,
+            model1_id=request.model1_id,
+            model2_id=request.model2_id,
+            embed_model_id=request.embed_model_id
+        )
         
         # Determine method from processor type
         method = "llm" if isinstance(processor, LLMBasedTextProcessor) else "rule-based"
         
-        # Get model info if using LLM (future enhancement)
+        # Get model info if using LLM
         model_used = None
         if method == "llm":
-            # TODO: Extract model info from LLMBasedTextProcessor once implemented
-            pass
+            model_used = {
+                "model1": request.model1_id,
+                "model2": request.model2_id,
+                "embed": request.embed_model_id
+            }
         
-        # Perform transformation using new processor
+        # Perform transformation using processor
         result = await process_text_to_json(
             text=request.text,
             schema_hint=request.schema_hint,
@@ -88,9 +106,6 @@ async def transform_text(request: TransformRequest):
             model_used=model_used
         )
     
-    except NotImplementedError as e:
-        # LLMBasedTextProcessor not yet implemented
-        raise HTTPException(status_code=501, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -100,19 +115,39 @@ async def transform_text(request: TransformRequest):
 @router.get("/methods")
 async def get_available_methods():
     """
-    Get information about available transformation methods.
+    Get information about available transformation methods and models.
     """
-    from app.services.model_manager import ModelManager
+    from app.services.lightweight_model_manager import LightweightModelManager
     
-    manager = ModelManager()
-    models = manager.list_models()
-    running_models = [m for m in models if m.status == "RUNNING"]
+    manager = LightweightModelManager()
+    
+    # Get chat models (for LLM processing)
+    chat_models = manager.list_chat_models()
+    running_chat = [m for m in chat_models if m.status == "RUNNING"]
+    
+    # Get embedding models
+    embed_models = manager.list_embedding_models()
+    running_embed = [m for m in embed_models if m.status == "RUNNING"]
+    
+    # Check if LLM-based is available (need at least 1 chat + 1 embed)
+    llm_available = len(running_chat) >= 1 and len(running_embed) >= 1
     
     return {
-        "llm_available": len(running_models) > 0,
-        "llm_models": [{"id": m.id, "name": m.model_name} for m in running_models],
         "rule_based_available": True,
-        "recommendation": "llm" if running_models else "rule-based"
+        "llm_available": llm_available,
+        "llm_models": [
+            {"id": m.id, "name": m.model_name, "status": m.status} 
+            for m in running_chat
+        ],
+        "embed_models": [
+            {"id": m.id, "name": m.model_name, "status": m.status}
+            for m in running_embed
+        ],
+        "recommendation": "llm" if llm_available else "rule-based",
+        "requirements": {
+            "llm": "Requires at least 1 running LLM model and 1 embedding model",
+            "rule_based": "Always available"
+        }
     }
 
 

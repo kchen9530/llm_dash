@@ -4,14 +4,22 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import { Loader2, ArrowRight, Sparkles, Code, Info } from 'lucide-react'
+import { Loader2, ArrowRight, Sparkles, Code, Info, Zap, Brain, Binary, ChevronRight } from 'lucide-react'
 import { api } from '@/lib/api'
 
 interface TransformResult {
   success: boolean
   result: Record<string, any>
   method: string
-  model_used?: string
+  model_used?: any
+}
+
+interface AvailableMethods {
+  rule_based_available: boolean
+  llm_available: boolean
+  llm_models: Array<{ id: string; name: string; status: string }>
+  embed_models: Array<{ id: string; name: string; status: string }>
+  recommendation: string
 }
 
 export default function Transform() {
@@ -19,12 +27,37 @@ export default function Transform() {
   const [schemaHint, setSchemaHint] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TransformResult | null>(null)
-  const [availableMethods, setAvailableMethods] = useState<any>(null)
+  const [availableMethods, setAvailableMethods] = useState<AvailableMethods | null>(null)
+  
+  // Mode selection
+  const [useLLM, setUseLLM] = useState(false)
+  
+  // Model selections for LLM mode
+  const [model1Id, setModel1Id] = useState('')
+  const [model2Id, setModel2Id] = useState('')
+  const [embedModelId, setEmbedModelId] = useState('')
+  
   const { toast } = useToast()
 
   useEffect(() => {
     fetchAvailableMethods()
+    // Refresh methods every 5 seconds
+    const interval = setInterval(fetchAvailableMethods, 5000)
+    return () => clearInterval(interval)
   }, [])
+
+  // Auto-select first available models when they become available
+  useEffect(() => {
+    if (availableMethods) {
+      if (availableMethods.llm_models.length > 0 && !model1Id) {
+        setModel1Id(availableMethods.llm_models[0].id)
+        setModel2Id(availableMethods.llm_models[0].id) // Default to same model
+      }
+      if (availableMethods.embed_models.length > 0 && !embedModelId) {
+        setEmbedModelId(availableMethods.embed_models[0].id)
+      }
+    }
+  }, [availableMethods])
 
   const fetchAvailableMethods = async () => {
     try {
@@ -34,6 +67,10 @@ export default function Transform() {
     } catch (error) {
       console.error('Failed to fetch methods:', error)
     }
+  }
+
+  const canUseLLM = () => {
+    return availableMethods?.llm_available && model1Id && model2Id && embedModelId
   }
 
   const handleTransform = async () => {
@@ -46,20 +83,37 @@ export default function Transform() {
       return
     }
 
+    if (useLLM && !canUseLLM()) {
+      toast({
+        title: 'Models Required',
+        description: 'Please select all required models for LLM processing',
+        variant: 'destructive',
+      })
+      return
+    }
+
     setLoading(true)
     setResult(null)
 
     try {
+      const requestBody: any = {
+        text: inputText,
+        schema_hint: schemaHint || null,
+        prefer_llm: useLLM,
+      }
+
+      if (useLLM) {
+        requestBody.model1_id = model1Id
+        requestBody.model2_id = model2Id
+        requestBody.embed_model_id = embedModelId
+      }
+
       const response = await fetch('http://localhost:7860/api/transform/text-to-json', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          text: inputText,
-          schema_hint: schemaHint || null,
-          prefer_llm: true,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -72,7 +126,7 @@ export default function Transform() {
       
       toast({
         title: 'Success',
-        description: `Transformed using ${data.method}${data.model_used ? ` (${data.model_used})` : ''}`,
+        description: `Transformed using ${data.method}`,
       })
     } catch (error: any) {
       toast({
@@ -106,25 +160,164 @@ export default function Transform() {
           <h1 className="text-3xl font-bold text-white">Transform</h1>
           <p className="text-gray-400 mt-1">Convert natural language to structured JSON</p>
         </div>
-        {availableMethods && (
-          <div className="flex items-center gap-2 text-sm">
-            <div className={`px-3 py-1 rounded-full ${
-              availableMethods.llm_available 
-                ? 'bg-green-900 text-green-300' 
-                : 'bg-yellow-900 text-yellow-300'
-            }`}>
-              {availableMethods.llm_available ? (
-                <span className="flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" />
-                  LLM Available
-                </span>
-              ) : (
-                <span>Rule-based Only</span>
-              )}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Mode Selection */}
+      <Card className="glass border-gray-800">
+        <CardHeader>
+          <CardTitle className="text-white text-lg">Processing Mode</CardTitle>
+          <CardDescription>Choose how to transform text to JSON</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Rule-based Option */}
+            <button
+              onClick={() => setUseLLM(false)}
+              className={`p-4 rounded-lg border-2 transition-all text-left ${
+                !useLLM
+                  ? 'border-blue-500 bg-blue-600/20'
+                  : 'border-gray-700 bg-gray-800/30 hover:border-gray-600'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <Zap className={`w-5 h-5 mt-0.5 ${!useLLM ? 'text-blue-400' : 'text-gray-400'}`} />
+                <div className="flex-1">
+                  <h3 className={`font-semibold mb-1 ${!useLLM ? 'text-white' : 'text-gray-300'}`}>
+                    Rule-Based
+                  </h3>
+                  <p className="text-xs text-gray-400 mb-2">
+                    Fast pattern matching • Always available • Deterministic
+                  </p>
+                  <div className="flex items-center gap-1 text-xs text-green-400">
+                    <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+                    Ready
+                  </div>
+                </div>
+              </div>
+            </button>
+
+            {/* LLM-based Option */}
+            <button
+              onClick={() => setUseLLM(true)}
+              disabled={!availableMethods?.llm_available}
+              className={`p-4 rounded-lg border-2 transition-all text-left ${
+                useLLM
+                  ? 'border-purple-500 bg-purple-600/20'
+                  : availableMethods?.llm_available
+                  ? 'border-gray-700 bg-gray-800/30 hover:border-gray-600'
+                  : 'border-gray-800 bg-gray-900/50 opacity-50 cursor-not-allowed'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <Brain className={`w-5 h-5 mt-0.5 ${useLLM ? 'text-purple-400' : 'text-gray-400'}`} />
+                <div className="flex-1">
+                  <h3 className={`font-semibold mb-1 ${useLLM ? 'text-white' : 'text-gray-300'}`}>
+                    LLM-Based (3-Step Pipeline)
+                  </h3>
+                  <p className="text-xs text-gray-400 mb-2">
+                    AI-powered • High accuracy • Context-aware
+                  </p>
+                  {availableMethods?.llm_available ? (
+                    <div className="flex items-center gap-1 text-xs text-green-400">
+                      <span className="w-2 h-2 bg-green-400 rounded-full"></span>
+                      {availableMethods.llm_models.length} LLM + {availableMethods.embed_models.length} Embed
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-xs text-yellow-400">
+                      <span className="w-2 h-2 bg-yellow-400 rounded-full"></span>
+                      Deploy models first
+                    </div>
+                  )}
+                </div>
+              </div>
+            </button>
+          </div>
+
+          {/* LLM Model Selection */}
+          {useLLM && availableMethods?.llm_available && (
+            <div className="mt-6 p-4 bg-gray-900/50 rounded-lg border border-gray-800">
+              <h4 className="text-sm font-semibold text-white mb-4 flex items-center">
+                <Sparkles className="w-4 h-4 mr-2 text-purple-400" />
+                3-Step Processing Pipeline
+              </h4>
+              
+              <div className="space-y-4">
+                {/* Step 1: Category Generation */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white text-sm font-bold flex-shrink-0">
+                    1
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs text-gray-400 mb-1">Category Generation (LLM Model 1)</Label>
+                    <select
+                      value={model1Id}
+                      onChange={(e) => setModel1Id(e.target.value)}
+                      className="w-full h-9 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm text-white"
+                    >
+                      <option value="">Select model...</option>
+                      {availableMethods.llm_models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                </div>
+
+                {/* Step 2: Detail Generation */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-600 text-white text-sm font-bold flex-shrink-0">
+                    2
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs text-gray-400 mb-1">Detail Generation (LLM Model 2)</Label>
+                    <select
+                      value={model2Id}
+                      onChange={(e) => setModel2Id(e.target.value)}
+                      className="w-full h-9 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm text-white"
+                    >
+                      <option value="">Select model...</option>
+                      {availableMethods.llm_models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-600 flex-shrink-0" />
+                </div>
+
+                {/* Step 3: Embedding */}
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-purple-600 text-white text-sm font-bold flex-shrink-0">
+                    3
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-xs text-gray-400 mb-1">Add Embedding Info (Embed Model)</Label>
+                    <select
+                      value={embedModelId}
+                      onChange={(e) => setEmbedModelId(e.target.value)}
+                      className="w-full h-9 rounded-md border border-gray-700 bg-gray-800 px-3 text-sm text-white"
+                    >
+                      <option value="">Select model...</option>
+                      {availableMethods.embed_models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-500 mt-4 italic">
+                💡 Tip: You can use the same LLM for both steps, or different ones for varied perspectives
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1">
@@ -170,13 +363,13 @@ export default function Transform() {
             {/* Transform Button */}
             <Button
               onClick={handleTransform}
-              disabled={!inputText.trim() || loading}
+              disabled={!inputText.trim() || loading || (useLLM && !canUseLLM())}
               className="bg-blue-600 hover:bg-blue-700 w-full h-12"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Transforming...
+                  Processing Pipeline...
                 </>
               ) : (
                 <>
@@ -220,8 +413,8 @@ export default function Transform() {
             {result ? (
               <div className="space-y-4 flex-1">
                 {/* Result JSON */}
-                <div className="bg-gray-900 rounded-lg p-4 border border-gray-700 flex-1">
-                  <pre className="text-green-400 font-mono text-sm overflow-auto">
+                <div className="bg-gray-900 rounded-lg p-4 border border-gray-700 flex-1 overflow-auto">
+                  <pre className="text-green-400 font-mono text-sm">
                     {JSON.stringify(result.result, null, 2)}
                   </pre>
                 </div>
@@ -230,12 +423,17 @@ export default function Transform() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-400">Method:</span>
-                    <span className="text-white font-mono">{result.method}</span>
+                    <span className={`font-mono ${
+                      result.method === 'llm' ? 'text-purple-400' : 'text-blue-400'
+                    }`}>
+                      {result.method}
+                    </span>
                   </div>
-                  {result.model_used && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-400">Model:</span>
-                      <span className="text-white font-mono">{result.model_used}</span>
+                  {result.model_used && result.method === 'llm' && (
+                    <div className="text-xs text-gray-500 space-y-1">
+                      <div>Step 1: {result.model_used.model1}</div>
+                      <div>Step 2: {result.model_used.model2}</div>
+                      <div>Step 3: {result.model_used.embed}</div>
                     </div>
                   )}
                   <div className="flex items-center justify-between text-sm">
@@ -253,7 +451,7 @@ export default function Transform() {
                     toast({ title: 'Copied to clipboard!' })
                   }}
                   variant="outline"
-                  className="w-full border-gray-700"
+                  className="w-full border-gray-700 text-white hover:bg-gray-800"
                 >
                   Copy JSON
                 </Button>
@@ -270,26 +468,7 @@ export default function Transform() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Info Banner */}
-      {availableMethods && !availableMethods.llm_available && (
-        <Card className="glass border-yellow-900 bg-yellow-900/10">
-          <CardContent className="pt-4">
-            <div className="flex items-start gap-3">
-              <Info className="w-5 h-5 text-yellow-400 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-yellow-300 text-sm font-semibold">Rule-based Mode Active</p>
-                <p className="text-yellow-400/80 text-xs mt-1">
-                  No LLM models are currently running. Using simple pattern matching rules.
-                  Deploy a model for better results with complex queries.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }
-
 
