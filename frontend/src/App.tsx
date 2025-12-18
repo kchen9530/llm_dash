@@ -6,6 +6,7 @@ import Deploy from '@/pages/Deploy'
 import Chat from '@/pages/Chat'
 import Transform from '@/pages/Transform'
 import PhotoSearch from '@/pages/PhotoSearch'
+import Playground from '@/pages/Playground'
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
             <Route path="/deploy" element={<Deploy />} />
             <Route path="/chat" element={<Chat />} />
             <Route path="/transform" element={<Transform />} />
+            <Route path="/playground" element={<Playground />} />
             <Route path="/photos" element={<PhotoSearch />} />
           </Routes>
         </Layout>

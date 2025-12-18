@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routers import models, system, chat, transform, embeddings, photo_search, recommendations
+from app.routers import models, system, chat, transform, embeddings, photo_search, recommendations, playground
 from app.core.config import settings
 from app.services.model_manager import ModelManager
 
@@ -46,6 +46,7 @@ app.include_router(transform.router, prefix="/api/transform", tags=["文本转�
 app.include_router(embeddings.router, prefix="/api/embeddings", tags=["向量嵌入"])
 app.include_router(photo_search.router, prefix="/api/photos", tags=["图片搜索"])
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["模型推荐"])
+app.include_router(playground.router, prefix="/api", tags=["Playground"])
 
 
 @app.get("/")

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Rocket, MessageSquare, Activity, Sparkles, Image } from 'lucide-react'
+import { LayoutDashboard, Rocket, MessageSquare, Activity, Sparkles, Image, Workflow } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navigation = [
@@ -7,6 +7,7 @@ const navigation = [
   { name: 'Deploy', href: '/deploy', icon: Rocket },
   { name: 'Chat', href: '/chat', icon: MessageSquare },
   { name: 'Transform', href: '/transform', icon: Sparkles },
+  { name: 'Playground', href: '/playground', icon: Workflow },
   { name: 'Photos', href: '/photos', icon: Image },
 ]
 
