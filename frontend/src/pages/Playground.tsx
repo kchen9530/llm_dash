@@ -11,6 +11,7 @@ import ReactFlow, {
   BackgroundVariant,
   Panel,
   NodeTypes,
+  MiniMap,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,8 +19,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
-import { Play, Trash2, Download, Upload, Loader2, Plus, Info } from 'lucide-react'
+import { Play, Trash2, Download, Upload, Loader2, Plus, Info, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, Maximize2, Minimize2 } from 'lucide-react'
 import ModelNode from '@/components/playground/ModelNode'
+import { cn } from '@/lib/utils'
 
 interface AvailableModel {
   id: string
@@ -55,8 +57,20 @@ export default function Playground() {
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [promptTemplate, setPromptTemplate] = useState('')
+  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
+  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+
+  const toggleFocusMode = () => {
+    if (leftSidebarOpen || rightSidebarOpen) {
+      setLeftSidebarOpen(false)
+      setRightSidebarOpen(false)
+    } else {
+      setLeftSidebarOpen(true)
+      setRightSidebarOpen(true)
+    }
+  }
 
   // Fetch available models
   useEffect(() => {
@@ -115,6 +129,7 @@ export default function Playground() {
     if (node) {
       setSelectedNode(node)
       setPromptTemplate(node.data.promptTemplate || '{input}')
+      setRightSidebarOpen(true) // Open right sidebar when editing
     }
   }
 
@@ -178,6 +193,7 @@ export default function Playground() {
 
     setExecuting(true)
     setExecutionResult(null)
+    setRightSidebarOpen(true) // Open right sidebar to show results
 
     try {
       // Build workflow definition
@@ -295,20 +311,43 @@ export default function Playground() {
   }
 
   return (
-    <div className="h-full flex gap-4">
+    <div className="h-full flex relative overflow-hidden">
+      {/* Left Sidebar Toggle (when closed) */}
+      {!leftSidebarOpen && (
+        <Button
+          variant="outline"
+          size="icon"
+          className="absolute left-2 top-4 z-10 border-gray-700 bg-gray-900 text-white hover:bg-gray-800 shadow-md"
+          onClick={() => setLeftSidebarOpen(true)}
+        >
+          <PanelLeftOpen className="w-4 h-4" />
+        </Button>
+      )}
+
       {/* Left Sidebar - Model Palette */}
-      <div className="w-56 flex flex-col gap-4">
-        <Card className="glass border-gray-800">
-          <CardHeader>
+      <div className={cn(
+        "flex flex-col transition-all duration-300 ease-in-out overflow-hidden",
+        leftSidebarOpen ? "w-64 opacity-100 mr-4" : "w-0 opacity-0 mr-0"
+      )}>
+        <Card className="glass border-gray-800 h-full flex flex-col">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
             <CardTitle className="text-white text-sm flex items-center">
               <Plus className="w-4 h-4 mr-2" />
-              Available Models
+              Models
             </CardTitle>
-            <CardDescription className="text-xs">
-              Click to add • Drag to connect • Self-loops allowed
-            </CardDescription>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-gray-400 hover:text-white"
+              onClick={() => setLeftSidebarOpen(false)}
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardDescription className="px-4 text-xs pb-2">
+            Click to add • Drag to connect
+          </CardDescription>
+          <CardContent className="space-y-2 overflow-y-auto flex-1 px-4 pb-4">
             {availableModels.length === 0 ? (
               <p className="text-xs text-gray-500">No models running</p>
             ) : (
@@ -338,14 +377,13 @@ export default function Playground() {
             </div>
           </CardContent>
         </Card>
-
       </div>
 
       {/* Main Canvas */}
-      <div className="flex-1 flex flex-col gap-4">
+      <div className="flex-1 flex flex-col min-w-0 h-full">
         {/* Controls */}
-        <Card className="glass border-gray-800">
-          <CardContent className="pt-4">
+        <Card className="glass border-gray-800 mb-4">
+          <CardContent className="pt-4 pb-4 px-4">
             <div className="flex gap-2">
               <Input
                 value={userInput}
@@ -374,38 +412,57 @@ export default function Playground() {
                 onClick={clearCanvas}
                 variant="outline"
                 className="border-gray-700 text-white hover:bg-gray-800"
+                title="Clear Canvas"
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
+              <div className="w-px bg-gray-700 mx-1" />
               <Button
                 onClick={saveWorkflow}
                 variant="outline"
                 className="border-gray-700 text-white hover:bg-gray-800"
                 disabled={nodes.length === 0}
+                title="Save Workflow"
               >
                 <Download className="w-4 h-4" />
               </Button>
-              <label>
+              <label className="cursor-pointer">
                 <input
                   type="file"
                   accept=".json"
                   onChange={loadWorkflow}
                   className="hidden"
-                />
-                <Button
-                  as="span"
-                  variant="outline"
-                  className="border-gray-700 text-white hover:bg-gray-800 cursor-pointer"
+                  />
+                <div className={cn(
+                    "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-gray-700 text-white hover:bg-gray-800 h-10 w-10"
+                  )}
+                  title="Load Workflow"
                 >
                   <Upload className="w-4 h-4" />
-                </Button>
+                </div>
               </label>
+              <div className="w-px bg-gray-700 mx-1" />
+              <Button
+                onClick={toggleFocusMode}
+                variant={(!leftSidebarOpen && !rightSidebarOpen) ? "secondary" : "outline"}
+                className={cn(
+                  "border-gray-700 text-white hover:bg-gray-800",
+                  (!leftSidebarOpen && !rightSidebarOpen) && "bg-blue-900/50 border-blue-500 text-blue-100"
+                )}
+                title={(!leftSidebarOpen && !rightSidebarOpen) ? "Exit Focus Mode" : "Enter Focus Mode (Maximize Canvas)"}
+              >
+                {(!leftSidebarOpen && !rightSidebarOpen) ? (
+                  <Minimize2 className="w-4 h-4" />
+                ) : (
+                  <Maximize2 className="w-4 h-4" />
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>
 
         {/* React Flow Canvas */}
-        <div ref={reactFlowWrapper} className="flex-1 bg-gray-950 rounded-lg border border-gray-800 min-h-[600px]">
+        <div ref={reactFlowWrapper} className="flex-1 bg-gray-950 rounded-lg border border-gray-800 h-full relative overflow-hidden shadow-inner">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -419,6 +476,11 @@ export default function Playground() {
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#374151" />
             <Controls className="bg-gray-800 border-gray-700" />
+            <MiniMap 
+                className="bg-gray-900 border border-gray-800 rounded-lg"
+                nodeColor={(node) => '#1f2937'}
+                maskColor="rgba(0, 0, 0, 0.7)"
+            />
             <Panel position="top-right" className="bg-gray-900 p-2 rounded-lg border border-gray-800">
               <div className="text-xs text-gray-400">
                 <div>Nodes: {nodes.length}</div>
@@ -429,16 +491,41 @@ export default function Playground() {
         </div>
       </div>
 
+      {/* Right Sidebar Toggle (when closed) */}
+      {!rightSidebarOpen && (
+        <Button
+          variant="outline"
+          size="icon"
+          className="absolute right-2 top-4 z-10 border-gray-700 bg-gray-900 text-white hover:bg-gray-800 shadow-md"
+          onClick={() => setRightSidebarOpen(true)}
+        >
+          <PanelRightOpen className="w-4 h-4" />
+        </Button>
+      )}
+
       {/* Right Sidebar - Results & Editor */}
-      <div className="w-72 flex flex-col gap-4">
+      <div className={cn(
+        "flex flex-col transition-all duration-300 ease-in-out overflow-hidden",
+        rightSidebarOpen ? "w-80 opacity-100 ml-4" : "w-0 opacity-0 ml-0"
+      )}>
         {/* Node Editor */}
         {selectedNode && (
-          <Card className="glass border-gray-800">
-            <CardHeader>
-              <CardTitle className="text-white text-sm">Edit Node Prompt</CardTitle>
-              <CardDescription className="text-xs">
-                {selectedNode.data.modelName}
-              </CardDescription>
+          <Card className="glass border-gray-800 flex-shrink-0">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div>
+                <CardTitle className="text-white text-sm">Edit Node Prompt</CardTitle>
+                <CardDescription className="text-xs">
+                  {selectedNode.data.modelName}
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-gray-400 hover:text-white"
+                onClick={() => setRightSidebarOpen(false)}
+              >
+                <PanelRightClose className="w-4 h-4" />
+              </Button>
             </CardHeader>
             <CardContent className="space-y-3">
               <Textarea
@@ -470,20 +557,32 @@ export default function Playground() {
 
         {/* Execution Results */}
         {executionResult && (
-          <Card className="glass border-gray-800 flex-1 overflow-auto">
-            <CardHeader>
-              <CardTitle className="text-white text-sm">Execution Results</CardTitle>
-              <CardDescription className="text-xs">
-                {executionResult.success ? (
-                  <span className="text-green-400">
-                    ✓ Completed in {executionResult.total_execution_time?.toFixed(2)}s
-                  </span>
-                ) : (
-                  <span className="text-red-400">✗ Failed</span>
-                )}
-              </CardDescription>
+          <Card className="glass border-gray-800 flex-1 overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <div>
+                <CardTitle className="text-white text-sm">Execution Results</CardTitle>
+                <CardDescription className="text-xs">
+                  {executionResult.success ? (
+                    <span className="text-green-400">
+                      ✓ Completed in {executionResult.total_execution_time?.toFixed(2)}s
+                    </span>
+                  ) : (
+                    <span className="text-red-400">✗ Failed</span>
+                  )}
+                </CardDescription>
+              </div>
+              {!selectedNode && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 text-gray-400 hover:text-white"
+                  onClick={() => setRightSidebarOpen(false)}
+                >
+                  <PanelRightClose className="w-4 h-4" />
+                </Button>
+              )}
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-3 overflow-y-auto flex-1">
               {executionResult.success ? (
                 Object.entries(executionResult.nodes).map(([nodeId, result]) => (
                   <div key={nodeId} className="bg-gray-900 p-3 rounded-lg border border-gray-800">
@@ -506,7 +605,15 @@ export default function Playground() {
         )}
 
         {!selectedNode && !executionResult && (
-          <Card className="glass border-gray-800 flex-1 flex items-center justify-center">
+          <Card className="glass border-gray-800 flex-1 flex items-center justify-center relative">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-2 right-2 h-6 w-6 text-gray-400 hover:text-white"
+              onClick={() => setRightSidebarOpen(false)}
+            >
+              <PanelRightClose className="w-4 h-4" />
+            </Button>
             <CardContent className="text-center text-gray-500">
               <p className="text-sm">No results yet</p>
               <p className="text-xs mt-1">Run a workflow to see results</p>
