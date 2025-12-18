@@ -40,7 +40,6 @@ Thumbs.db
 
 # Model cache
 .cache/
-models/
-
+/models/
 # Temporary files
 nohup.out

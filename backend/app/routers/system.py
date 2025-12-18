@@ -3,7 +3,7 @@
 """
 from fastapi import APIRouter
 
-from app.models.schemas import SystemStatus
+from app.types.schemas import SystemStatus
 from app.services.system_monitor import system_monitor
 from app.core.config import settings
 

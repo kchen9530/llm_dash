@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, Optional, List
 import logging
 
-from app.models.schemas import ModelInfo, ModelStatus, DeployRequest
+from app.types.schemas import ModelInfo, ModelStatus, DeployRequest
 from app.services.cpu_model_runner import CPUModelRunner
 from app.services.model_logger import model_logger
 from app.core.model_config import (

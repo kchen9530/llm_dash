@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 import os
 import json
 
-from app.models.schemas import ChatRequest
+from app.types.schemas import ChatRequest
 
 # Use lightweight manager for 8GB RAM systems
 USE_LIGHTWEIGHT = os.getenv("USE_LIGHTWEIGHT_MANAGER", "true").lower() == "true"

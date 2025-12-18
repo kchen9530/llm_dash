@@ -10,7 +10,7 @@ import psutil
 import signal
 from pathlib import Path
 
-from app.models.schemas import ModelInfo, ModelStatus, DeployRequest
+from app.types.schemas import ModelInfo, ModelStatus, DeployRequest
 from app.core.config import settings
 
 

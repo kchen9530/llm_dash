@@ -7,7 +7,7 @@ import asyncio
 import json
 import os
 
-from app.models.schemas import DeployRequest, ModelInfo
+from app.types.schemas import DeployRequest, ModelInfo
 
 # Use lightweight manager for 8GB RAM systems
 USE_LIGHTWEIGHT = os.getenv("USE_LIGHTWEIGHT_MANAGER", "true").lower() == "true"

@@ -10,7 +10,7 @@ try:
 except ImportError:
     HAS_NVIDIA = False
 
-from app.models.schemas import SystemStatus, GPUInfo
+from app.types.schemas import SystemStatus, GPUInfo
 
 
 class SystemMonitor:
