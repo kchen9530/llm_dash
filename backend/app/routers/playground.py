@@ -214,9 +214,9 @@ async def get_available_models():
     
     Returns both chat and embedding models that are currently running
     """
-    from app.services.lightweight_model_manager import LightweightModelManager
+    from app.services.factory import get_model_manager
     
-    manager = LightweightModelManager()
+    manager = get_model_manager()
     
     chat_models = manager.list_chat_models()
     embed_models = manager.list_embedding_models()

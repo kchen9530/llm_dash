@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     
     # GPU/CPU 模式配置
     # 🔧 FEATURE SWITCH: Set FORCE_CPU_MODE=False when GPU is available
-    FORCE_CPU_MODE: bool = True  # Set to False to enable GPU when available
+    FORCE_CPU_MODE: bool = False  # Set to False to enable GPU when available
     USE_GPU: bool = False  # Auto-detected, don't set manually
     
     # WebSocket 配置

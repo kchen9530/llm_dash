@@ -9,17 +9,10 @@ import os
 import json
 
 from app.types.schemas import ChatRequest
-
-# Use lightweight manager for 8GB RAM systems
-USE_LIGHTWEIGHT = os.getenv("USE_LIGHTWEIGHT_MANAGER", "true").lower() == "true"
-
-if USE_LIGHTWEIGHT:
-    from app.services.lightweight_model_manager import LightweightModelManager as ModelManager
-else:
-    from app.services.model_manager import ModelManager
+from app.services.factory import get_model_manager
 
 router = APIRouter()
-model_manager = ModelManager()
+model_manager = get_model_manager()
 
 
 @router.post("/completions")

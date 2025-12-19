@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.types.schemas import ModelInfo, ModelStatus, DeployRequest
 from app.core.config import settings
+from app.core.model_config import is_embedding_model, is_chat_model
 
 
 class ModelInstance:
@@ -34,6 +35,7 @@ class ModelInstance:
         self.start_time: Optional[datetime] = None
         self.error_message: Optional[str] = None
         self.log_buffer: List[str] = []
+        self.model_type = "embedding" if is_embedding_model(model_name) else "chat"
         
     def to_model_info(self) -> ModelInfo:
         """转换为 ModelInfo"""

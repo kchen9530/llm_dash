@@ -158,6 +158,39 @@ class LightweightModelManager:
             else:
                 # Load chat model
                 max_length = instance.parameters.get("max_model_len", 512)
+                
+                # --- NEW: Explicit Download Step with Resume Support ---
+                from huggingface_hub import snapshot_download
+                from app.core.model_config import CHAT_MODELS_DIR
+                import tqdm
+                from app.services.download_utils import DownloadProgress
+                
+                logger.info(f"📥 Checking/Downloading model {instance.model_name}...")
+                model_logger.add_log(instance.model_id, "📥 Checking local cache / Downloading model...", "INFO")
+                model_logger.add_log(instance.model_id, "⚡ Supports resumable download (断点续传)", "INFO")
+                
+                # Temporarily patch tqdm to capture progress
+                original_tqdm = tqdm.tqdm
+                tqdm.tqdm = DownloadProgress.get_tqdm_class(instance.model_id)
+                
+                try:
+                    # Download to specific cache directory
+                    snapshot_download(
+                        repo_id=instance.model_name,
+                        cache_dir=str(CHAT_MODELS_DIR),
+                        resume_download=True,  # Enable resume support
+                        local_files_only=False # Allow downloading
+                    )
+                except Exception as e:
+                    logger.error(f"Download error: {e}")
+                    model_logger.add_log(instance.model_id, f"⚠️ Download warning: {e}", "WARNING")
+                    # We continue, as maybe CPUModelRunner can handle it or it's already there
+                finally:
+                    # Restore original tqdm
+                    tqdm.tqdm = original_tqdm
+                
+                # --- End Download Step ---
+                
                 model_logger.add_log(instance.model_id, f"Creating model runner (max_length: {min(max_length, 512)})", "INFO")
                 
                 instance.runner = CPUModelRunner(

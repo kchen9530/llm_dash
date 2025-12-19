@@ -11,7 +11,6 @@ import ReactFlow, {
   BackgroundVariant,
   Panel,
   NodeTypes,
-  MiniMap,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,9 +18,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/components/ui/use-toast'
-import { Play, Trash2, Download, Upload, Loader2, Plus, Info, PanelLeftOpen, PanelLeftClose, PanelRightOpen, PanelRightClose, Maximize2, Minimize2 } from 'lucide-react'
+import { Play, Trash2, Download, Upload, Loader2, Plus, Info } from 'lucide-react'
 import ModelNode from '@/components/playground/ModelNode'
-import { cn } from '@/lib/utils'
+import InputNode from '@/components/playground/InputNode'
+import OutputNode from '@/components/playground/OutputNode'
 
 interface AvailableModel {
   id: string
@@ -46,10 +46,29 @@ interface ExecutionResult {
 
 const nodeTypes: NodeTypes = {
   modelNode: ModelNode,
+  inputNode: InputNode,
+  outputNode: OutputNode,
 }
 
+const initialNodes: Node[] = [
+  {
+    id: 'input-node',
+    type: 'inputNode',
+    position: { x: 50, y: 200 },
+    data: { value: '', onChange: () => {} },
+    deletable: false,
+  },
+  {
+    id: 'output-node',
+    type: 'outputNode',
+    position: { x: 800, y: 200 },
+    data: { output: '', loading: false, error: undefined },
+    deletable: false,
+  },
+]
+
 export default function Playground() {
-  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
   const [userInput, setUserInput] = useState('')
@@ -57,20 +76,33 @@ export default function Playground() {
   const [executionResult, setExecutionResult] = useState<ExecutionResult | null>(null)
   const [selectedNode, setSelectedNode] = useState<Node | null>(null)
   const [promptTemplate, setPromptTemplate] = useState('')
-  const [leftSidebarOpen, setLeftSidebarOpen] = useState(true)
-  const [rightSidebarOpen, setRightSidebarOpen] = useState(true)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
+  const nodesRef = useRef(nodes)
   const { toast } = useToast()
 
-  const toggleFocusMode = () => {
-    if (leftSidebarOpen || rightSidebarOpen) {
-      setLeftSidebarOpen(false)
-      setRightSidebarOpen(false)
-    } else {
-      setLeftSidebarOpen(true)
-      setRightSidebarOpen(true)
-    }
-  }
+  // Sync InputNode data with userInput state
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((node) => {
+        if (node.type === 'inputNode') {
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              value: userInput,
+              onChange: (val: string) => setUserInput(val),
+            },
+          }
+        }
+        return node
+      })
+    )
+  }, [userInput, setNodes])
+
+  // Keep nodes ref in sync
+  useEffect(() => {
+    nodesRef.current = nodes
+  }, [nodes])
 
   // Fetch available models
   useEffect(() => {
@@ -125,11 +157,10 @@ export default function Playground() {
 
   // Handle node editing
   const handleEditNode = (nodeId: string) => {
-    const node = nodes.find((n) => n.id === nodeId)
+    const node = nodesRef.current.find((n) => n.id === nodeId)
     if (node) {
       setSelectedNode(node)
       setPromptTemplate(node.data.promptTemplate || '{input}')
-      setRightSidebarOpen(true) // Open right sidebar when editing
     }
   }
 
@@ -160,14 +191,15 @@ export default function Playground() {
     setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
   }
 
-  // Clear canvas
+  // Clear canvas (Reset to default)
   const clearCanvas = () => {
-    setNodes([])
+    setNodes(initialNodes)
     setEdges([])
     setExecutionResult(null)
+    setUserInput('')
     toast({
-      title: 'Canvas Cleared',
-      description: 'All nodes and edges have been removed',
+      title: 'Canvas Reset',
+      description: 'Reset to default input/output nodes',
     })
   }
 
@@ -176,16 +208,17 @@ export default function Playground() {
     if (!userInput.trim()) {
       toast({
         title: 'Input Required',
-        description: 'Please enter an input for the workflow',
+        description: 'Please enter an input in the Input Node',
         variant: 'destructive',
       })
       return
     }
 
-    if (nodes.length === 0) {
+    const modelNodes = nodes.filter((n) => n.type === 'modelNode')
+    if (modelNodes.length === 0) {
       toast({
-        title: 'No Nodes',
-        description: 'Add at least one model node to the canvas',
+        title: 'No Models',
+        description: 'Add at least one model node between Input and Output',
         variant: 'destructive',
       })
       return
@@ -193,23 +226,37 @@ export default function Playground() {
 
     setExecuting(true)
     setExecutionResult(null)
-    setRightSidebarOpen(true) // Open right sidebar to show results
+
+    // Update OutputNode to loading state
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.type === 'outputNode'
+          ? { ...n, data: { ...n.data, loading: true, output: '', error: undefined } }
+          : n
+      )
+    )
 
     try {
-      // Build workflow definition
+      // Build workflow definition (only model nodes)
       const workflow = {
-        nodes: nodes.map((node) => ({
+        nodes: modelNodes.map((node) => ({
           id: node.id,
           model_id: node.data.modelId,
           model_name: node.data.modelName,
           prompt_template: node.data.promptTemplate || '{input}',
           position: node.position,
         })),
-        edges: edges.map((edge) => ({
-          source: edge.source,
-          target: edge.target,
-          id: edge.id,
-        })),
+        edges: edges
+          .filter((edge) => {
+            const source = nodes.find((n) => n.id === edge.source)
+            const target = nodes.find((n) => n.id === edge.target)
+            return source?.type === 'modelNode' && target?.type === 'modelNode'
+          })
+          .map((edge) => ({
+            source: edge.source,
+            target: edge.target,
+            id: edge.id,
+          })),
       }
 
       const response = await fetch('http://localhost:7860/api/playground/execute', {
@@ -231,24 +278,74 @@ export default function Playground() {
       const result: ExecutionResult = await response.json()
       setExecutionResult(result)
 
+      // Update OutputNode with result
+      // Find the node connected to OutputNode
+      const outputEdge = edges.find((e) => {
+        const target = nodes.find((n) => n.id === e.target)
+        return target?.type === 'outputNode'
+      })
+
+      let finalOutput = ''
       if (result.success) {
+        if (outputEdge) {
+          const lastModelId = outputEdge.source
+          const lastNodeResult = result.nodes[lastModelId]
+          finalOutput = lastNodeResult?.output || 'No output from connected node'
+        } else {
+          finalOutput = 'Output node not connected'
+        }
+
         toast({
           title: 'Workflow Completed',
           description: `Executed ${Object.keys(result.nodes).length} nodes in ${result.total_execution_time?.toFixed(2)}s`,
         })
       } else {
+        finalOutput = result.error || 'Unknown error'
         toast({
           title: 'Workflow Failed',
           description: result.error || 'Unknown error',
           variant: 'destructive',
         })
       }
+
+      // Update OutputNode data
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.type === 'outputNode'
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  loading: false,
+                  output: finalOutput,
+                  error: result.success ? undefined : result.error,
+                },
+              }
+            : n
+        )
+      )
     } catch (error: any) {
       toast({
         title: 'Execution Failed',
         description: error.message,
         variant: 'destructive',
       })
+      
+      // Update OutputNode with error
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.type === 'outputNode'
+            ? {
+                ...n,
+                data: {
+                  ...n.data,
+                  loading: false,
+                  error: error.message,
+                },
+              }
+            : n
+        )
+      )
     } finally {
       setExecuting(false)
     }
@@ -311,43 +408,20 @@ export default function Playground() {
   }
 
   return (
-    <div className="h-full flex relative overflow-hidden">
-      {/* Left Sidebar Toggle (when closed) */}
-      {!leftSidebarOpen && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="absolute left-2 top-4 z-10 border-gray-700 bg-gray-900 text-white hover:bg-gray-800 shadow-md"
-          onClick={() => setLeftSidebarOpen(true)}
-        >
-          <PanelLeftOpen className="w-4 h-4" />
-        </Button>
-      )}
-
+    <div className="h-full flex gap-4">
       {/* Left Sidebar - Model Palette */}
-      <div className={cn(
-        "flex flex-col transition-all duration-300 ease-in-out overflow-hidden",
-        leftSidebarOpen ? "w-64 opacity-100 mr-4" : "w-0 opacity-0 mr-0"
-      )}>
-        <Card className="glass border-gray-800 h-full flex flex-col">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 px-4 pt-4">
+      <div className="w-56 flex flex-col gap-4">
+        <Card className="glass border-gray-800">
+          <CardHeader>
             <CardTitle className="text-white text-sm flex items-center">
               <Plus className="w-4 h-4 mr-2" />
-              Models
+              Available Models
             </CardTitle>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-gray-400 hover:text-white"
-              onClick={() => setLeftSidebarOpen(false)}
-            >
-              <PanelLeftClose className="w-4 h-4" />
-            </Button>
+            <CardDescription className="text-xs">
+              Click to add • Drag to connect • Self-loops allowed
+            </CardDescription>
           </CardHeader>
-          <CardDescription className="px-4 text-xs pb-2">
-            Click to add • Drag to connect
-          </CardDescription>
-          <CardContent className="space-y-2 overflow-y-auto flex-1 px-4 pb-4">
+          <CardContent className="space-y-2">
             {availableModels.length === 0 ? (
               <p className="text-xs text-gray-500">No models running</p>
             ) : (
@@ -377,13 +451,14 @@ export default function Playground() {
             </div>
           </CardContent>
         </Card>
+
       </div>
 
       {/* Main Canvas */}
-      <div className="flex-1 flex flex-col min-w-0 h-full">
+      <div className="flex-1 flex flex-col gap-4">
         {/* Controls */}
-        <Card className="glass border-gray-800 mb-4">
-          <CardContent className="pt-4 pb-4 px-4">
+        <Card className="glass border-gray-800">
+          <CardContent className="pt-4">
             <div className="flex gap-2">
               <Input
                 value={userInput}
@@ -412,57 +487,40 @@ export default function Playground() {
                 onClick={clearCanvas}
                 variant="outline"
                 className="border-gray-700 text-white hover:bg-gray-800"
-                title="Clear Canvas"
               >
                 <Trash2 className="w-4 h-4" />
               </Button>
-              <div className="w-px bg-gray-700 mx-1" />
               <Button
                 onClick={saveWorkflow}
                 variant="outline"
                 className="border-gray-700 text-white hover:bg-gray-800"
                 disabled={nodes.length === 0}
-                title="Save Workflow"
               >
                 <Download className="w-4 h-4" />
               </Button>
-              <label className="cursor-pointer">
+              <label>
                 <input
                   type="file"
                   accept=".json"
                   onChange={loadWorkflow}
                   className="hidden"
-                  />
-                <div className={cn(
-                    "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-gray-700 text-white hover:bg-gray-800 h-10 w-10"
-                  )}
-                  title="Load Workflow"
+                />
+                <Button
+                  asChild
+                  variant="outline"
+                  className="border-gray-700 text-white hover:bg-gray-800 cursor-pointer"
                 >
-                  <Upload className="w-4 h-4" />
-                </div>
+                  <span>
+                    <Upload className="w-4 h-4" />
+                  </span>
+                </Button>
               </label>
-              <div className="w-px bg-gray-700 mx-1" />
-              <Button
-                onClick={toggleFocusMode}
-                variant={(!leftSidebarOpen && !rightSidebarOpen) ? "secondary" : "outline"}
-                className={cn(
-                  "border-gray-700 text-white hover:bg-gray-800",
-                  (!leftSidebarOpen && !rightSidebarOpen) && "bg-blue-900/50 border-blue-500 text-blue-100"
-                )}
-                title={(!leftSidebarOpen && !rightSidebarOpen) ? "Exit Focus Mode" : "Enter Focus Mode (Maximize Canvas)"}
-              >
-                {(!leftSidebarOpen && !rightSidebarOpen) ? (
-                  <Minimize2 className="w-4 h-4" />
-                ) : (
-                  <Maximize2 className="w-4 h-4" />
-                )}
-              </Button>
             </div>
           </CardContent>
         </Card>
 
         {/* React Flow Canvas */}
-        <div ref={reactFlowWrapper} className="flex-1 bg-gray-950 rounded-lg border border-gray-800 h-full relative overflow-hidden shadow-inner">
+        <div ref={reactFlowWrapper} className="flex-1 bg-gray-950 rounded-lg border border-gray-800 min-h-[600px]">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -476,11 +534,6 @@ export default function Playground() {
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#374151" />
             <Controls className="bg-gray-800 border-gray-700" />
-            <MiniMap 
-                className="bg-gray-900 border border-gray-800 rounded-lg"
-                nodeColor={(node) => '#1f2937'}
-                maskColor="rgba(0, 0, 0, 0.7)"
-            />
             <Panel position="top-right" className="bg-gray-900 p-2 rounded-lg border border-gray-800">
               <div className="text-xs text-gray-400">
                 <div>Nodes: {nodes.length}</div>
@@ -491,41 +544,16 @@ export default function Playground() {
         </div>
       </div>
 
-      {/* Right Sidebar Toggle (when closed) */}
-      {!rightSidebarOpen && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="absolute right-2 top-4 z-10 border-gray-700 bg-gray-900 text-white hover:bg-gray-800 shadow-md"
-          onClick={() => setRightSidebarOpen(true)}
-        >
-          <PanelRightOpen className="w-4 h-4" />
-        </Button>
-      )}
-
       {/* Right Sidebar - Results & Editor */}
-      <div className={cn(
-        "flex flex-col transition-all duration-300 ease-in-out overflow-hidden",
-        rightSidebarOpen ? "w-80 opacity-100 ml-4" : "w-0 opacity-0 ml-0"
-      )}>
+      <div className="w-72 flex flex-col gap-4">
         {/* Node Editor */}
         {selectedNode && (
-          <Card className="glass border-gray-800 flex-shrink-0">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div>
-                <CardTitle className="text-white text-sm">Edit Node Prompt</CardTitle>
-                <CardDescription className="text-xs">
-                  {selectedNode.data.modelName}
-                </CardDescription>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-gray-400 hover:text-white"
-                onClick={() => setRightSidebarOpen(false)}
-              >
-                <PanelRightClose className="w-4 h-4" />
-              </Button>
+          <Card className="glass border-gray-800">
+            <CardHeader>
+              <CardTitle className="text-white text-sm">Edit Node Prompt</CardTitle>
+              <CardDescription className="text-xs">
+                {selectedNode.data.modelName}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               <Textarea
@@ -557,32 +585,20 @@ export default function Playground() {
 
         {/* Execution Results */}
         {executionResult && (
-          <Card className="glass border-gray-800 flex-1 overflow-hidden flex flex-col">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div>
-                <CardTitle className="text-white text-sm">Execution Results</CardTitle>
-                <CardDescription className="text-xs">
-                  {executionResult.success ? (
-                    <span className="text-green-400">
-                      ✓ Completed in {executionResult.total_execution_time?.toFixed(2)}s
-                    </span>
-                  ) : (
-                    <span className="text-red-400">✗ Failed</span>
-                  )}
-                </CardDescription>
-              </div>
-              {!selectedNode && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-gray-400 hover:text-white"
-                  onClick={() => setRightSidebarOpen(false)}
-                >
-                  <PanelRightClose className="w-4 h-4" />
-                </Button>
-              )}
+          <Card className="glass border-gray-800 flex-1 overflow-auto">
+            <CardHeader>
+              <CardTitle className="text-white text-sm">Execution Results</CardTitle>
+              <CardDescription className="text-xs">
+                {executionResult.success ? (
+                  <span className="text-green-400">
+                    ✓ Completed in {executionResult.total_execution_time?.toFixed(2)}s
+                  </span>
+                ) : (
+                  <span className="text-red-400">✗ Failed</span>
+                )}
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 overflow-y-auto flex-1">
+            <CardContent className="space-y-3">
               {executionResult.success ? (
                 Object.entries(executionResult.nodes).map(([nodeId, result]) => (
                   <div key={nodeId} className="bg-gray-900 p-3 rounded-lg border border-gray-800">
@@ -605,15 +621,7 @@ export default function Playground() {
         )}
 
         {!selectedNode && !executionResult && (
-          <Card className="glass border-gray-800 flex-1 flex items-center justify-center relative">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-2 right-2 h-6 w-6 text-gray-400 hover:text-white"
-              onClick={() => setRightSidebarOpen(false)}
-            >
-              <PanelRightClose className="w-4 h-4" />
-            </Button>
+          <Card className="glass border-gray-800 flex-1 flex items-center justify-center">
             <CardContent className="text-center text-gray-500">
               <p className="text-sm">No results yet</p>
               <p className="text-xs mt-1">Run a workflow to see results</p>
