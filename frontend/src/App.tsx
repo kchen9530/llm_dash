@@ -5,7 +5,6 @@ import Dashboard from '@/pages/Dashboard'
 import Deploy from '@/pages/Deploy'
 import Chat from '@/pages/Chat'
 import Transform from '@/pages/Transform'
-import PhotoSearch from '@/pages/PhotoSearch'
 import Playground from '@/pages/Playground'
 
 function App() {
@@ -19,7 +18,6 @@ function App() {
             <Route path="/chat" element={<Chat />} />
             <Route path="/transform" element={<Transform />} />
             <Route path="/playground" element={<Playground />} />
-            <Route path="/photos" element={<PhotoSearch />} />
           </Routes>
         </Layout>
         <Toaster />

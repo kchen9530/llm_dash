@@ -133,7 +133,7 @@ RECOMMENDED_EMBEDDING_MODELS = {
         "dimensions": 384,
         "speed": "⚡⚡",
         "description": "Best balance (RECOMMENDED)",
-        "recommended_for": "Photo search, semantic search",
+        "recommended_for": "Semantic search",
         "family": "MiniLM"
     },
     "sentence-transformers/all-MiniLM-L12-v2": {

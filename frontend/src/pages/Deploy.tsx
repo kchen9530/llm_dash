@@ -339,8 +339,7 @@ export default function Deploy() {
               <div className="mt-4 p-3 bg-purple-600/10 border border-purple-600/30 rounded-lg">
                 <p className="text-xs text-purple-300">
                   <Binary className="w-3 h-3 inline mr-1" />
-                  <strong>Note:</strong> Embedding models output vectors (floats), not chat responses. 
-                  Use them in Photo Search tab, not Chat tab.
+                  <strong>Note:</strong> Embedding models output vectors (floats), not chat responses.
                 </p>
               </div>
             </TabsContent>

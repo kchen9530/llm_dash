@@ -30,12 +30,6 @@ You asked for models to be stored **locally under project root** instead of syst
    - Auto-detects embedding models
    - Filters them out of Chat dropdown
    - Shows only chat models for chat
-   - Shows only embedding models for photo search
-
-6. **Photo Search Integration**:
-   - Uses deployed embedding models
-   - No need to download separately
-   - Reuses already-loaded models
 
 ---
 
@@ -55,7 +49,7 @@ Result:
 - Available in Chat tab
 ```
 
-### 2. Deploy Embedding Model (for Photo Search tab)
+### 2. Deploy Embedding Model
 
 ```
 Go to: http://localhost:5173/deploy
@@ -67,7 +61,6 @@ Result:
 - Downloads to: llm-dash/models/models--sentence-transformers--all-MiniLM-L6-v2/
 - Loads into memory
 - NOT shown in Chat tab (it only outputs vectors)
-- Used automatically in Photo Search tab
 ```
 
 ### 3. Use Deployed Models
@@ -75,11 +68,6 @@ Result:
 **Chat Tab:**
 - Dropdown shows: gpt2, distilgpt2, gpt2-medium
 - Does NOT show: sentence-transformers/... (embedding models)
-
-**Photo Search Tab:**
-- Click "Initialize Search"
-- Uses first deployed embedding model automatically
-- No need to download again!
 
 ---
 
@@ -106,14 +94,12 @@ llm-dash/
 │       │   └── recommendations.py   # 🆕 Recommendations API
 │       └── services/
 │           ├── lightweight_model_manager.py  # 🔧 Updated: model detection
-│           └── photo_search_service.py       # 🔧 Updated: use deployed models
 │
 └── frontend/
     └── src/
         └── pages/
             ├── Deploy.tsx           # 🔧 Updated: show recommendations
             ├── Chat.tsx             # 🔧 Updated: filter embeddings
-            └── PhotoSearch.tsx      # 🔧 Updated: use deployed models
 ```
 
 ---
@@ -128,7 +114,7 @@ llm-dash/
 | `gpt2` | 124M (500MB) | ~800MB | ⚡⚡ | ⭐⭐ | **General use (BEST)** |
 | `gpt2-medium` | 355M (1.5GB) | ~2.5GB | ⚡ | ⭐⭐⭐ | Better responses |
 
-### Embedding Models (use in Photo Search tab)
+### Embedding Models
 
 | Model | Size | RAM | Dimensions | Best For |
 |-------|------|-----|------------|----------|
@@ -150,11 +136,10 @@ llm-dash/
    Use in: Chat tab
    ```
 
-2. **Deploy Embedding Model** (for photo search):
+2. **Deploy Embedding Model**:
    ```
    Deploy → Embedding Models → all-MiniLM-L6-v2 → Deploy
    Wait for: RUNNING status
-   Use in: Photo Search tab
    ```
 
 ### Smart Filtering
@@ -162,9 +147,6 @@ llm-dash/
 - **Chat Tab Dropdown**: Shows only `gpt2`, `gpt2-medium`, `distilgpt2`
   - Automatically hides embedding models (they can't chat!)
 
-- **Photo Search**: Uses deployed embedding models automatically
-  - No need to specify model name
-  - Reuses already-loaded models
 
 ### Model Lifecycle
 
@@ -172,8 +154,6 @@ llm-dash/
 Deploy → Model downloads to models/ → Loads into RAM → RUNNING
   ↓
 Chat with it (if chat model)
-  OR
-Use for photo search (if embedding model)
   ↓
 Stop → Unloads from RAM (file stays in models/)
   ↓
@@ -264,7 +244,7 @@ http://localhost:5173/chat
 → Get response ✅
 ```
 
-### Test 2: Deploy and Use Embedding Model
+### Test 2: Deploy Embedding Model
 
 ```bash
 # 1. Deploy embedding model
@@ -275,15 +255,6 @@ http://localhost:5173/deploy
 
 # 2. Wait for RUNNING
 http://localhost:5173/
-
-# 3. Initialize photo search
-http://localhost:5173/photos
-→ Click "Initialize Search"
-→ Wait 10 seconds
-
-# 4. Search
-→ Type "a black dog"
-→ See results ✅
 ```
 
 ### Test 3: Verify Model Separation
@@ -294,9 +265,6 @@ http://localhost:5173/photos
 # Chat tab should show:
 - gpt2 ✅
 - all-MiniLM-L6-v2 ❌ (hidden)
-
-# Photo search should use:
-- all-MiniLM-L6-v2 ✅ (auto-selected)
 ```
 
 ---
@@ -315,7 +283,6 @@ http://localhost:5173/photos
    - Input: Text
    - Output: Vector (list of floats)
    - Examples: all-MiniLM-L6-v2
-   - Use: Photo Search tab
 
 ### Auto-Detection
 
@@ -347,7 +314,6 @@ The system automatically detects model type by name:
 - **`models/README.md`** - Model directory details
 - **`TINY_MODELS_GUIDE.md`** - Tiny models for 8GB RAM
 - **`EMBEDDING_MODELS.md`** - Embedding models guide
-- **`PHOTO_SEARCH.md`** - Photo search feature
 - **`QUICKSTART.txt`** - Quick start guide
 
 ---
@@ -355,7 +321,7 @@ The system automatically detects model type by name:
 ## ✅ Summary
 
 **What you asked for:**
-> "I feel like you can have local model dir under project root, then download any model there if missing, also include some small embedding model there as well, so that I can deploy these small size embed model using web as well, anyway, do not select embed model deployed as available in chat tab, since embed only give list of float value, but I will use deployed embed model in photo search tab"
+> "I feel like you can have local model dir under project root, then download any model there if missing, also include some small embedding model there as well, so that I can deploy these small size embed model using web as well, anyway, do not select embed model deployed as available in chat tab, since embed only give list of float value"
 
 **What's implemented:**
 
@@ -364,7 +330,6 @@ The system automatically detects model type by name:
 ✅ Deploy both chat and embedding models via web UI  
 ✅ Embedding models hidden from Chat tab dropdown  
 ✅ Embedding models shown in Embedding Models tab  
-✅ Photo Search uses deployed embedding models  
 ✅ Smart model type detection  
 ✅ Curated recommendations for 8GB RAM  
 
@@ -374,7 +339,6 @@ The system automatically detects model type by name:
 2. Deploy `gpt2` (Chat Models tab)
 3. Deploy `all-MiniLM-L6-v2` (Embedding Models tab)
 4. Chat with gpt2 (only gpt2 shows in dropdown)
-5. Use photo search (uses all-MiniLM-L6-v2 automatically)
 
 Everything stores in `llm-dash/models/` locally! 📦
 
