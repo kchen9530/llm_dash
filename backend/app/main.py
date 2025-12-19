@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.routers import models, system, chat, transform, embeddings, recommendations, playground
+from app.routers import models, system, chat, embeddings, recommendations, playground
 from app.core.config import settings
 from app.services.model_manager import ModelManager
 
@@ -42,7 +42,6 @@ app.add_middleware(
 app.include_router(system.router, prefix="/api/system", tags=["系统监控"])
 app.include_router(models.router, prefix="/api/models", tags=["模型管理"])
 app.include_router(chat.router, prefix="/api/chat", tags=["对话"])
-app.include_router(transform.router, prefix="/api/transform", tags=["文本转换"])
 app.include_router(embeddings.router, prefix="/api/embeddings", tags=["向量嵌入"])
 app.include_router(recommendations.router, prefix="/api/recommendations", tags=["模型推荐"])
 app.include_router(playground.router, prefix="/api", tags=["Playground"])

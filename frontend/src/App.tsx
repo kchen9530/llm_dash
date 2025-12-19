@@ -4,7 +4,6 @@ import Layout from '@/components/Layout'
 import Dashboard from '@/pages/Dashboard'
 import Deploy from '@/pages/Deploy'
 import Chat from '@/pages/Chat'
-import Transform from '@/pages/Transform'
 import Playground from '@/pages/Playground'
 
 function App() {
@@ -16,7 +15,6 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/deploy" element={<Deploy />} />
             <Route path="/chat" element={<Chat />} />
-            <Route path="/transform" element={<Transform />} />
             <Route path="/playground" element={<Playground />} />
           </Routes>
         </Layout>
